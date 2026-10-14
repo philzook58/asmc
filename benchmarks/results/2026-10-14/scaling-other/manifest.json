@@ -1,0 +1,32 @@
+{
+  "host": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "cpu": "AMD Ryzen 7 PRO 7840U w/ Radeon 780M Graphics",
+  "tools": "/home/philip/vibe_coding/asmc/build/bin",
+  "solvers": {
+    "sat": {
+      "path": "/home/philip/vibe_coding/asmc/build/bin/cbmc",
+      "version": "6.11.0 (32441ee3)",
+      "flags": []
+    },
+    "bitwuzla": {
+      "path": "/usr/local/bin/bitwuzla",
+      "version": "0.4.0-dev-main@f361d3eb",
+      "flags": [
+        "--bitwuzla",
+        "--external-smt2-solver",
+        "/usr/local/bin/bitwuzla"
+      ]
+    }
+  },
+  "missing_solvers": [],
+  "variants": [
+    "plain"
+  ],
+  "timeout_s": 3.0,
+  "memory_limit_mib": 1024,
+  "repetitions": 1,
+  "profile_validated": {
+    "sat/plain": true,
+    "bitwuzla/plain": true
+  }
+}

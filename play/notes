@@ -1,0 +1,87 @@
+It is weird that there is only one callable thing?
+
+Can I use this to compare a C version and an assembly output?
+Validate dwarf metadata?
+Confirm decompilation?
+Linking a C version to assembly subroutines.
+
+Frama-C examples
+CBMC examples. Apply them to their compiled versions
+Where is float support?
+
+Worst case execution time? (in number of instructions which is that even useful?)
+riscv interrupts. CSRs go into a different space. We may want different asmc_state per arch.
+
+Support arm
+
+There was previous work attaching assembly
+Connect the assembly to a verilog cpu via ebmc?
+
+What if the assembly heap allocates?
+Calls other C functions?
+Calls other assembly routines?
+
+Why is runtime.c specialized to x86?
+
+Division, simd, indirect branches are not supported?
+
+I am worried that a jump table is a common thing that can appear in compiler output or assembly
+ [https://en.wikipedia.org/wiki/Branch_table](https://en.wikipedia.org/wiki/Branch_table) ,
+  especially on some architectures. This would require some indirect jump support.
+   Also maybe the ability to read global memory? I'm also concerned that some assembly tweaks global symbols
+   that also might need to be visible / tweaked from C ? Maybe we've bitten off too much and this just won't be easily
+   supportable without too much added complication ?
+
+
+Interesting assembly programs?
+- Art of computer programming
+- Forth interpreters
+- Arith Expressions hutton's razor. Calculators
+- https://flatassembler.net/examples.php
+- art of assembly randall hyde book
+- ffmpeg tutorial https://github.com/FFmpeg/asm-lessons
+- https://github.com/StefanoBelli/x86_64-samples
+- https://www.xorpd.net/
+- https://github.com/awesome-simd/awesome-simd
+- Daniel Lemire
+- Geoff Langdale
+- Wojciech Muła
+
+https://model-checking.github.io/cbmc-training/projects.html
+https://github.com/awslabs/aws-c-common
+https://github.com/fraunhoferfokus/acsl-by-example
+
+https://github.com/nornagon/jonesforth/blob/master/jonesforth.S
+https://github.com/u-boot/u-boot/blob/master/arch/riscv/lib/memcpy.S
+
+
+Are we fundametnally restricted by the goto binary based infrasturcture. Some things it would be nice to iteratively discover?
+What are alternatives to this architecture?
+Is there some way to do it better? It feels like one ought to be able to link assembly binaries against C files, but it isn't easy for us?
+Would a binary specific static analysis help some issues? Resolving jump possibilities, etc. How to do so soundly?
+Preexisting C++ binary analysis tooling? C? Reuse more out of ghidra?
+
+Going between assembly and C is an FFI boundary basically. Perhaps we should take more qeueus from such designs
+
+It would be good to validate executions against concrete executions on qemu / native as part of our tests.
+Pcode semantics and our interpretation of it is not entirely trustworthy. Fuzzing
+
+Is it really not possible to hand cbmc memory objects over into the assembly?
+Could we not interpret ghidra LOAD and STORE instruction using the same memory model as the C layer uses (split the pointer inter object identifier and offset)?
+We could also allocate a ram block as a stack (as a cbmc object)
+Detecting misuse of C provided malloced (out of bounds etc) objects would be a great bug finding thing.
+Maybe I'm wrong that this ought to be fairly possible but let's think about it
+
+Information leakage checking? Self comparison letting high data differ but low data is the same. Should just be a harness?
+Binsec examples?
+
+Maybe instead of just instruction count, could count loads,stores,arith ops ?
+Something useful to do with taint?
+
+CBAT had other effects observed. What is written to or read from can be an effect of interest. What functions are called.
+
+SAIL has a much better fine grained model. Would we be able to detect unaligned loads and stores? Other issues like that are not persay part of the
+pcode output. Some things depend on the current machine state in a way that the pcode lifters make optimisitc assumptions?
+You could look at the sail-graham project for more stuff like this.
+How feasible would it be to use sail or isla output in addition to or instead of pcode?
+Pcode does make it easy being a prepackaged C++ project.

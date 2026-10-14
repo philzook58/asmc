@@ -1,0 +1,71 @@
+{
+  "host": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+  "cpu": "",
+  "tools": "/home/philip/vibe_coding/asmc/build/bin",
+  "solvers": {
+    "sat": {
+      "path": "/home/philip/vibe_coding/asmc/build/bin/cbmc",
+      "version": "6.11.0 (32441ee3)",
+      "flags": []
+    },
+    "z3": {
+      "path": "/home/philip/vibe_coding/asmc/.venv/bin/z3",
+      "version": "Z3 version 5.1.0 - 64 bit",
+      "flags": [
+        "--z3",
+        "--external-smt2-solver",
+        "/home/philip/vibe_coding/asmc/.venv/bin/z3"
+      ]
+    },
+    "cvc5": {
+      "path": "/home/philip/vibe_coding/asmc/.venv/bin/cvc5",
+      "version": "cvc5 1.4.2 [git 282d5e0 on branch HEAD]",
+      "flags": [
+        "--cvc5",
+        "--external-smt2-solver",
+        "/home/philip/vibe_coding/asmc/.venv/bin/cvc5"
+      ]
+    },
+    "bitwuzla": {
+      "path": "/usr/local/bin/bitwuzla",
+      "version": "0.4.0-dev-main@f361d3eb",
+      "flags": [
+        "--bitwuzla",
+        "--external-smt2-solver",
+        "/usr/local/bin/bitwuzla"
+      ]
+    },
+    "yices": {
+      "path": "/usr/bin/yices-smt2",
+      "version": "Yices 2.6.5",
+      "flags": [
+        "--yices",
+        "--external-smt2-solver",
+        "/usr/bin/yices-smt2"
+      ]
+    },
+    "kissat": {
+      "path": "/usr/local/bin/kissat",
+      "version": "4.0.1",
+      "flags": [
+        "--external-sat-solver",
+        "/usr/local/bin/kissat"
+      ]
+    }
+  },
+  "missing_solvers": [],
+  "variants": [
+    "plain"
+  ],
+  "timeout_s": 8.0,
+  "memory_limit_mib": 1024,
+  "repetitions": 1,
+  "profile_validated": {
+    "sat/plain": true,
+    "z3/plain": true,
+    "cvc5/plain": true,
+    "bitwuzla/plain": true,
+    "yices/plain": false,
+    "kissat/plain": true
+  }
+}

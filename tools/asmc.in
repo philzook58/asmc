@@ -1,0 +1,10 @@
+#!@Python3_EXECUTABLE@
+# Generated executable: keep the driver implementation in the source tree.
+import sys
+sys.path.insert(0, "@CMAKE_CURRENT_SOURCE_DIR@/tools")
+from driver import main
+try:
+    sys.exit(main("@PROJECT_VERSION@"))
+except OSError as error:
+    print(f"ERROR: {error}", file=sys.stderr)
+    sys.exit(2)

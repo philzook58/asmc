@@ -1,0 +1,4 @@
+https://github.com/awslabs/s2n-bignum
+4d1356a7470663c752660a59375dc3a9ef548428
+Unmodified word_max.S, bignum_add.S and their include headers.
+Compiled with the upstream NO_IBT option (CET is outside the initial model).

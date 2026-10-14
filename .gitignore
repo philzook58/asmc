@@ -1,0 +1,8 @@
+build/
+build-*/
+.deps/
+__pycache__/
+asmc-out/
+.venv/
+.cache/
+.tmp/
