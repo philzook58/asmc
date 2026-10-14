@@ -52,7 +52,9 @@ class Translator {
     symbol.location = location;
     auto value = symbol.symbol_expr();
     if (model.symbol_table.add(symbol)) throw std::runtime_error("generated symbol collision");
-    declarations.add(goto_programt::make_decl(code_declt(value), location));
+    // Declarations run at entry, not at the machine address that uses the temp.
+    // Giving them assembly locations would duplicate instructions in traces.
+    declarations.add(goto_programt::make_decl(code_declt(value), source_locationt{}));
     return value;
   }
   symbol_exprt snapshot(const exprt &value) {

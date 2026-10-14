@@ -72,7 +72,11 @@ ElfImage ElfImage::load(const std::string &path, const std::string &function,
     auto [start, size] = symbol->second;
     auto limit = name == function ? explicit_end : std::optional<uint64_t>{};
     if (!limit && size == 0)
-      throw std::runtime_error("function " + name + " has no size; use .type/.size or --end-address for the entry");
+      throw std::runtime_error("function " + name + " has no size; add .type " + name +
+        ",@function and .size " + name + ",.-" + name +
+        (name == function ?
+          "\nOr use --end-address ADDRESS: the exclusive linked virtual address, not a byte count." : "") +
+        "\nAn end label after the function gives this address; inspect the linked ELF with:\n  nm -n " + shell_quote(path));
     if (!limit && size > UINT64_MAX - start) throw std::runtime_error("function address range wraps");
     uint64_t end = limit.value_or(start + size);
     if (bits == 32 && (start > UINT32_MAX || end > UINT64_C(0x100000000)))

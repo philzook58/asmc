@@ -30,6 +30,8 @@ int main(int argc, char **argv) {
                    "  For --memory objects, compile the runtime with -DASMC_OBJECT_MEMORY.\n"
                    "  Architecture is selected from ELF; use -m32 for an RV32 template.\n"
                    "  Outputs OUT.gb and its address/p-code listing OUT.gb.asm.\n"
+                   "  --end-address is the exclusive linked virtual address, not a byte count.\n"
+                   "  Prefer .type/.size; use nm -n FILE.elf to read an explicit end label.\n"
                    "  Use 'asmc --help' for the top-level verification driver.\n";
       return argc == 1 ? 2 : 0;
     }

@@ -47,6 +47,9 @@ set_tests_properties(asmc-challenges PROPERTIES TIMEOUT 600)
 add_test(NAME asmc-check COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tests/check.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 set_tests_properties(asmc-check PROPERTIES TIMEOUT 180)
+add_test(NAME asmc-source COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/source.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
+set_tests_properties(asmc-source PROPERTIES TIMEOUT 180)
 add_test(NAME asmc-demo COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tests/demo.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 set_tests_properties(asmc-demo PROPERTIES TIMEOUT 300)

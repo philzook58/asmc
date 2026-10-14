@@ -47,9 +47,7 @@ fixtures, with the upstream commit recorded in tests/s2n-bignum/VERSION.
 Run from the ASMC directory:
 
 ~~~sh
-mkdir -p build/demo
-gcc -nostdlib -no-pie -Wl,-e,inc examples/inc.S -o build/demo/inc.elf
-build/bin/asmc build/demo/inc.elf --function inc \
+build/bin/asmc examples/inc.S --function inc \
   --post 'out.rax == in.rdi + 1'
 ~~~
 
@@ -58,6 +56,31 @@ links a C harness, and runs CBMC with model validation, traces, and unwinding
 assertions. It uses asmc-lift, goto-cc, and cbmc from the same build directory.
 No template needs to be created by hand. Without --harness it generates an
 ordinary C harness, saved as demo.c in the output directory.
+
+For `.s`/`.S` input, the driver first assembles and links a static ELF with
+`CC` (default `cc`) and `CPPFLAGS`, `CFLAGS`, `LDFLAGS`. Shell-style quoting is
+accepted in those variables; commands run without a shell. The compiler is
+responsible for target selection, and the harness ABI is then selected from ELF:
+
+~~~sh
+CC=riscv64-unknown-elf-gcc CFLAGS='-march=rv32imc -mabi=ilp32' \
+  build/bin/asmc examples/riscv/instructions.S --function zero_test \
+  --post 'out.a0 == in.a0 + 1'
+~~~
+
+The native link uses `-nostdlib -static -no-pie` and the selected function as
+entry point. `assemble.log`, the command, and `target.elf` are retained alongside
+the check. Environment flags affect that native build; use `-I`/`-D` for the C
+specifications. Existing ELF inputs still go straight to lifting.
+
+GNU assembly should annotate functions with `.type foo,@function` and
+`.size foo,.-foo`; no end address is then needed. If size metadata is absent,
+`--end-address 0x...` is the **exclusive end virtual address in the linked ELF**,
+not an instruction count or a byte offset in the source/object file. Put a
+label such as `foo_end:` immediately after the final instruction and read its
+address with `nm -n OUTPUT/target.elf`. Pass that address on the next check.
+`objdump -d OUTPUT/target.elf` disassembles the linked code; GNU objdump cannot
+assign linked addresses to a textual `.s` file.
 
 The default harness selects x86-64 SysV, RV32 or RV64 from ELF. It supplies
 a 256-byte stack (change with --stack-size, minimum 16), a valid return sentinel,
@@ -76,7 +99,7 @@ according to XLEN. Arithmetic follows C's type/promotion rules; cast explicitly
 for signed or narrower results. For example:
 
 ~~~sh
-build/bin/asmc build/demo/inc.elf --function inc \
+build/bin/asmc examples/inc.S --function inc \
   --pre 'in.rdi == UINT64_MAX' --post 'out.rax == 0'
 # For a RISC-V increment ELF:
 build/bin/asmc build/examples/rv32.elf --function inc \
@@ -207,9 +230,9 @@ The release archive's SHA-256 is
 Choose the solver and its executable explicitly:
 
 ~~~sh
-build/bin/asmc build/demo/inc.elf --function inc \
+build/bin/asmc examples/inc.S --function inc \
   --harness examples/inc_spec.c --z3 --solver-path .venv/bin/z3
-build/bin/asmc build/demo/inc.elf --function inc \
+build/bin/asmc examples/inc.S --function inc \
   --harness examples/inc_spec.c --cvc5 --solver-path .venv/bin/cvc5
 ~~~
 
@@ -222,6 +245,8 @@ activate the environment and use tests/run.py's --solver z3 or --solver cvc5.
 Use asmc-lift for the individual toolchain steps:
 
 ~~~sh
+mkdir -p build/demo
+gcc -nostdlib -no-pie -Wl,-e,inc examples/inc.S -o build/demo/inc.elf
 build/bin/goto-cc -I include -c runtime/runtime.c -o build/demo/seed.gb
 build/bin/asmc-lift build/demo/inc.elf --function inc \
   --template build/demo/seed.gb -o build/demo/inc.gb

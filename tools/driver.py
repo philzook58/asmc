@@ -77,11 +77,11 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
 def main(version):
     parser = argparse.ArgumentParser(
         prog="asmc",
-        description="Lift an ELF function, link a C harness, and run CBMC.",
-        epilog="Example: asmc build/demo/inc.elf --function inc "
+        description="Check an ELF or GNU assembly function against a C harness.",
+        epilog="Example: asmc examples/inc.S --function inc "
                "--post 'out.rax == in.rdi + 1'")
     parser.add_argument("--version", action="version", version="ASMC " + version)
-    parser.add_argument("elf", type=Path, help="linked x86-64 or RV32/RV64 ELF containing the function")
+    parser.add_argument("input", type=Path, help="linked ELF or .s/.S source (assembled with CC, default: cc)")
     parser.add_argument("--function", required=True, help="ELF symbol to lift")
     parser.add_argument("--target", default="asmc_target", help="name of the lifted GOTO function (default: asmc_target)")
     parser.add_argument("--callee", action="append", default=[], help="admit another ELF function for direct calls/tail calls; repeatable")
@@ -132,7 +132,8 @@ def main(version):
                         help="seconds allowed per tool (default: 300)")
     parser.add_argument("--memory-limit", type=positive,
                         help="address-space limit in MiB per tool/solver process")
-    for option in ("end-address", "sla", "pspec"):
+    parser.add_argument("--end-address", help="exclusive end virtual address in linked ELF (decimal or 0xHEX); prefer .type/.size")
+    for option in ("sla", "pspec"):
         parser.add_argument("--" + option, help="forwarded to the lifter")
     parser.add_argument("--lifter", type=Path,
                         default=Path(sys.argv[0]).resolve().with_name("asmc-lift"),
@@ -154,7 +155,7 @@ def main(version):
         parser.error("--max-field-sensitivity-array-size must be nonnegative")
     lifter = args.lifter.resolve()
     cc, cbmc = (lifter.parent / name for name in ("goto-cc", "cbmc"))
-    for path in (args.elf, *([args.harness] if args.harness else []), *args.reference, lifter, cc, cbmc):
+    for path in (args.input, *([args.harness] if args.harness else []), *args.reference, lifter, cc, cbmc):
         if not path.is_file():
             parser.error(f"file not found: {path}; build the asmc-tools target first")
 
@@ -217,13 +218,25 @@ def main(version):
         return process.returncode, text
 
     try:
+        elf = args.input.resolve()
+        if elf.suffix in (".s", ".S"):
+            compiler = shlex.split(os.environ.get("CC", "cc"))
+            if not compiler:
+                raise RuntimeError("CC must name a compiler")
+            flags = [arg for name in ("CPPFLAGS", "CFLAGS")
+                     for arg in shlex.split(os.environ.get(name, ""))]
+            link_flags = shlex.split(os.environ.get("LDFLAGS", ""))
+            source, elf = elf, output / "target.elf"
+            run("assemble", [*compiler, *flags, "-nostdlib", "-static", "-no-pie",
+                             "-Wl,-e," + args.function, source, *link_flags, "-o", elf])
+            print(f"ELF: {elf}", flush=True)
         seed, lifted, linked = (output / name for name in ("seed.gb", "lifted.gb", "check.gb"))
         compile_options = ["-I", ROOT / "include", "-DASMC_TARGET=" + args.target]
         if args.scalar_registers:
             compile_options.append("-DASMC_SCALAR_REGISTERS")
         if args.memory == "objects":
             compile_options.append("-DASMC_OBJECT_MEMORY")
-        with args.elf.open("rb") as stream:
+        with elf.open("rb") as stream:
             header = stream.read(20)
         architecture, bits = None, None
         if len(header) == 20 and header[:4] == b"\x7fELF" and header[5] == 1:
@@ -263,7 +276,7 @@ def main(version):
             value = getattr(args, option.replace("-", "_"))
             if value is not None:
                 lift_options += ["--" + option, value]
-        run("lift", [lifter, args.elf.resolve(), "--function", args.function,
+        run("lift", [lifter, elf, "--function", args.function,
                      "--target", args.target, "--template", seed, "-o", lifted, *lift_options])
         run("link", [cc, *compile_options, lifted, harness,
                      *(path.resolve() for path in args.reference), "-o", linked])
@@ -357,7 +370,7 @@ def main(version):
         if code == 11:
             resource_guidance((output / "cbmc.log").read_text(errors="replace"))
         return result(status, f"tool timed out after {args.timeout}s; no verification result", code)
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, ValueError) as error:
         return result("ERROR", str(error), 2)
     except KeyboardInterrupt:
         return result("INCOMPLETE", "interrupted; no verification result", 130)
