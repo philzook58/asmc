@@ -54,8 +54,9 @@ build/bin/asmc examples/inc.S --function inc \
 The asmc driver compiles the runtime template, lifts the selected ELF symbol,
 links a C harness, and runs CBMC with model validation, traces, and unwinding
 assertions. It uses asmc-lift, goto-cc, and cbmc from the same build directory.
-No template needs to be created by hand. Without --harness it generates an
-ordinary C harness, saved as demo.c in the output directory.
+No template needs to be created by hand. Without --harness,
+[tools/demo.py](tools/demo.py) generates an ordinary C harness, saved as
+`demo.c` in the output directory printed by ASMC.
 
 For `.s`/`.S` input, the driver first assembles and links a static ELF with
 `CC` (default `cc`) and `CPPFLAGS`, `CFLAGS`, `LDFLAGS`. Shell-style quoting is
@@ -100,8 +101,15 @@ In the default RAM mode the stack occupies numeric addresses starting at 0x1000;
 --pre and --post take **C expressions**, parsed by goto-cc, and can be repeated.
 Each precondition is assumed after ABI setup and before calling the assembly;
 each postcondition is asserted after it returns. in.REG and out.REG are entry
-and exit register snapshots. x86 general-purpose fields are uint64_t, with
-uint8_t flag fields cf/pf/af/zf/sf/of/df. RISC-V fields use ABI names
+and exit register snapshots. x86 full general-purpose fields (`rax`, `rdi`,
+`r8`, etc.) are uint64_t. Their standard aliases are available as uint32_t
+(`eax`, `edi`, `r8d`), uint16_t (`ax`, `di`, `r8w`), and uint8_t
+(`al`, `ah`, `dil`, `r8b`, etc.). Aliases are derived from the same captured
+register value. For example, `--post 'out.eax == in.edi + 42'` expresses
+unsigned 32-bit addition, including wraparound. Signed interpretations still
+need casts; C promotes 8/16-bit arithmetic to `int`, so use an explicit result
+cast for narrow wraparound, e.g. `out.al == (uint8_t)(in.dil + 1)`.
+Flag fields cf/pf/af/zf/sf/of/df are uint8_t. RISC-V fields use ABI names
 (zero, ra, sp, gp, tp, a0–a7, s0–s11, t0–t6) and uint32_t or uint64_t
 according to XLEN. Arithmetic follows C's type/promotion rules; cast explicitly
 for signed or narrower results. For example:

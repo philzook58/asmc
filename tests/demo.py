@@ -46,6 +46,26 @@ def main():
         check("wraparound", elf, "inc", ["--pre", "in.rdi == UINT64_MAX", "--pre", "in.rsi == 9",
                                           "--post", "out.rax == 0", "--post", "out.rsi == in.rsi"])
         check("zero_extension", elf, "alias_dword", ["--post", "out.rax == (uint32_t)in.rdi"])
+        check("dword_aliases", elf, "alias_dword", ["--post", "out.eax == in.edi",
+                                                    "--post", "out.rax == out.eax"])
+        check("dword_wrap", elf, "inc", ["--pre", "in.edi == UINT32_MAX",
+                                         "--post", "out.eax == in.edi + 1", "--post", "out.eax == 0"])
+        text, _ = check("wrong_dword", elf, "inc_bad", ["--post", "out.eax == in.edi + 1"], 10)
+        assert "in.edi=" in text and "out.eax=" in text
+        check("byte_aliases", elf, "alias_byte", ["--post", "out.al == 0x34 && out.ah == 0x12",
+              "--post", "out.ax == 0x1234", "--post", "(out.rax >> 16) == (in.rdi >> 16)"])
+        check("word_aliases", elf, "alias_word", ["--post", "out.ax == 0x4321",
+              "--post", "(out.rax >> 16) == (in.rdi >> 16)"])
+        check("narrow_wrap", elf, "inc", ["--pre", "in.dil == UINT8_MAX && in.di == UINT16_MAX",
+              "--post", "out.al == (uint8_t)(in.dil + 1)",
+              "--post", "out.ax == (uint16_t)(in.di + 1)"])
+        check("extended_aliases", elf, "inc", ["--pre", "in.r8 == UINT64_C(0x123456789abcdef0)",
+              "--pre", "in.r15 == UINT64_C(0xfedcba9876543210)",
+              "--pre", "in.rcx == 0xab12 && in.rdx == 0xcd34 && in.rbx == 0xef56",
+              "--post", "out.r8d == 0x9abcdef0u && out.r8w == 0xdef0 && out.r8b == 0xf0",
+              "--post", "out.r15d == 0x76543210u && out.r15w == 0x3210 && out.r15b == 0x10",
+              "--post", "out.ch == 0xab && out.dh == 0xcd && out.bh == 0xef",
+              "--post", "out.spl == (uint8_t)out.rsp && out.sp == (uint16_t)out.rsp"])
         check("signed_maximum", elf, "max_signed", ["--post",
               "(int64_t)out.rax == ((int64_t)in.rdi < (int64_t)in.rsi ? (int64_t)in.rsi : (int64_t)in.rdi)"])
         text, _ = check("safety_only", elf, "inc_bad")
