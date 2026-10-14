@@ -91,6 +91,8 @@ def main(version):
     parser.add_argument("--indirect-target", action="append", default=[], help="allowed indirect-jump symbol/address inside admitted functions; repeatable")
     parser.add_argument("--dispatch", action="store_true",
                         help="join native branches in one dispatch loop; unwind counts basic blocks")
+    parser.add_argument("--scalar-registers", action="store_true",
+                        help="experimental: use scalarizable register words, preserving byte aliases")
     parser.add_argument("--harness", type=Path, help="C harness (default: generate a stack/ABI harness)")
     parser.add_argument("--pre", action="append", default=[],
                         help="C assumption over entry registers in.REG; repeatable; default harness only")
@@ -181,8 +183,9 @@ def main(version):
         if progress:
             print("Last checker progress: " + progress[-1])
         print("Try smaller RAM and checked per-loop bounds, --slice-formula, or another solver (--bitwuzla/--z3/--cvc5).")
-        print("For call/dispatch-heavy models, try --max-field-sensitivity-array-size 768; "
-              "for symbolic buffer accesses, compare 0 with the default 64. These tradeoffs are model-dependent.")
+        print("For call/dispatch models, compare --scalar-registers with a field threshold covering the stack "
+              "(e.g. --max-field-sensitivity-array-size 128), or 768 with the default register bank. "
+              "For symbolic buffers, compare 0 with the default 64; measure these tradeoffs.")
 
     def run(stage, command):
         command = [str(arg) for arg in command]
@@ -216,6 +219,8 @@ def main(version):
     try:
         seed, lifted, linked = (output / name for name in ("seed.gb", "lifted.gb", "check.gb"))
         compile_options = ["-I", ROOT / "include", "-DASMC_TARGET=" + args.target]
+        if args.scalar_registers:
+            compile_options.append("-DASMC_SCALAR_REGISTERS")
         if args.memory == "objects":
             compile_options.append("-DASMC_OBJECT_MEMORY")
         with args.elf.open("rb") as stream:

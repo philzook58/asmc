@@ -86,3 +86,6 @@ set_tests_properties(asmc-switch PROPERTIES TIMEOUT 300)
 add_test(NAME asmc-objects COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tests/objects.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 set_tests_properties(asmc-objects PROPERTIES TIMEOUT 600)
+add_test(NAME asmc-scalar-registers COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/scalar.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
+set_tests_properties(asmc-scalar-registers PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)

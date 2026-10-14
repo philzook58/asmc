@@ -129,6 +129,31 @@ The driver also accepts `--bitwuzla` (with optional `--solver-path`),
 scalarization, while 768 covers the ASMC register bank and can help call dispatch.
 These settings have different costs for symbolic buffers; defaults remain unchanged.
 
+`--scalar-registers` is an experimental, register-only encoding change: it stores
+the same 768 bytes as three flat `uint64_t[32]` blocks so CBMC can track
+96 storage cells at its default array threshold of 64.
+It leaves RAM and C object arrays unchanged. The words are
+not architectural registers: `AL`, `AH`, `AX`, `EAX`, and `RAX` still share bytes,
+and accesses can span blocks. SLEIGH supplies effects such as clearing the upper
+half of `RAX` on an `EAX` write. This also works on RV32/RV64 without another
+register map. It does not cache register values or change pointer aliasing.
+Whole-word accesses use assignments directly; partial accesses use CBMC's
+little-endian byte extract/update operations, preserving neighboring bytes.
+
+For low-level `asmc-lift` workflows, compile **every C input** with
+`-DASMC_SCALAR_REGISTERS`; the lifter detects the layout from the seed. The driver
+supplies that definition for you. Precompiled GOTO inputs must use the same layout.
+Use `ASMC_REG_BYTE(s, offset)` for direct byte access, or the existing get/set
+helpers. The flat layout remains the default while performance is evaluated;
+`--max-field-sensitivity-array-size 0` disables CBMC scalarization for either
+layout. The global threshold still controls RAM, stacks and other C arrays;
+for a 128-byte call stack, compare a threshold of 128 with the default 64. Re-run the existing semantic and
+native-oracle tests with the new layout:
+`ctest --test-dir build -R '^asmc-scalar-registers$' --output-on-failure -j1`.
+That suite keeps the existing backends and uses Z3 for object-mode driver checks.
+Keep the flag opt-in: storage changes can improve call dispatch and hurt
+other models. See the [measured comparison](benchmarks/results/2026-10-14-registers/README.md).
+
 Use --show-loops to discover loop IDs for --unwindset, or --show-properties to
 list obligations. These modes lift and link normally but do not verify: they
 report **INSPECT** (exit 0), save the listing in cbmc.log, and never report PASS.

@@ -57,6 +57,13 @@ checks are excluded. CBMC's goto-instrument constant propagator and full slicer
 explicitly warn of unsoundness, so neither is used. `arrays-uf` is an experiment,
 not a recommendation: the local SAT backend failed its known-good control.
 
+Add `--scalar-registers` to build the register bank as three flat arrays of
+32 storage words each, keeping data arrays unchanged. [Measured comparison](results/2026-10-14-registers/README.md).
+Run it and the default encoding into separate
+output directories with identical selectors, bounds, solvers, and repetitions;
+the manifest and each result record the encoding. This differs from raising the
+global field-sensitivity threshold, which also scalarizes qualifying data arrays.
+
 Every profile first checks a passing increment, a wrong postcondition, an
 insufficient call bound, and an invalid native object load. A failed control
 disables that profile's subsequent workload runs and makes the script exit

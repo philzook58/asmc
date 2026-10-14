@@ -25,6 +25,8 @@ def main():
         for line in (run / "results.jsonl").read_text().splitlines():
             row = json.loads(line)
             if validated.get(row["solver"] + "/" + row["variant"], False) and not row["control"]:
+                if row.get("scalar_registers", False):
+                    row["variant"] += "+scalar-registers"
                 row["limit_s"] = manifest["timeout_s"]
                 rows.append(row)
     groups = defaultdict(list)
@@ -91,14 +93,14 @@ def main():
     script = ["set terminal svg size 1200,900 enhanced font 'sans,13'", "set output 'scaling.svg'",
               "set multiplot layout 2,2 title 'ASMC scaling: triangles mark timeouts; squares mark OOM RSS observations'",
               "set grid", "set key top left", "set logscale x 2", "set logscale y 10", "set format y '%g'",
-              "set xlabel 'Buffer bytes'", "set ylabel 'Wall seconds'", "set title 'Symbolic 8-byte store: numeric RAM'"]
+              "set xlabel 'Buffer bytes'", "set ylabel 'Wall seconds'", "set title 'Symbolic 8-byte store: numeric RAM, flat registers'"]
     items = []
     for solver, color in zip(solvers, colors):
         path = series("memory-" + solver, lambda row, solver=solver: row["family"] == "memory-write" and
                       row["memory"] == "ram" and not row["fixed_index"] and row["solver"] == solver and row["variant"] == "plain")
         items.append((solver, path, color))
     script.append(curves(items))
-    script += ["set xlabel 'Conditional branches'", "set ylabel 'SSA steps'", "set title 'Direct branches vs PC dispatch (same function)'"]
+    script += ["set xlabel 'Conditional branches'", "set ylabel 'SSA steps'", "set title 'Direct branches vs PC dispatch: flat registers'"]
     items = []
     for dispatch, color in zip((False, True), colors):
         path = series("branches-" + str(dispatch), lambda row, dispatch=dispatch: row["family"] == "branches" and
@@ -108,13 +110,13 @@ def main():
     script += ["set xlabel 'Dispatch unwind bound (two actual calls)'", "set ylabel 'Peak reported RSS MiB'",
                "set title 'Loose bounds and register-array scalarization'"]
     items = []
-    for variant, color in zip(("plain", "fields-768", "fields-1024"), colors):
+    for variant, color in zip(("plain", "fields-768", "fields-1024", "plain+scalar-registers", "fields-128+scalar-registers"), colors):
         path = series("bounds-" + variant, lambda row, variant=variant: row["family"] == "call-bound" and
                       row["solver"] == "sat" and row["variant"] == variant, "rss_kib")
         items.append((variant, path, color))
     script.append(curves(items))
     script += ["set xlabel 'Admitted input/result bit width'", "set ylabel 'Wall seconds'",
-               "set title 'Nonlinear modular arithmetic identity'"]
+               "set title 'Nonlinear modular arithmetic identity: flat registers'"]
     items = []
     for solver, color in zip(solvers, colors):
         path = series("multiply-" + solver, lambda row, solver=solver: row["family"] == "multiply" and

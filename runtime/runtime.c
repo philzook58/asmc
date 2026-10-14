@@ -13,15 +13,24 @@ void ASMC_TARGET(struct asmc_state *s) { (void)s; }
 
 uint64_t asmc_get_reg(const struct asmc_state *s, unsigned offset, unsigned bytes) {
   assert(bytes >= 1 && bytes <= 8 && offset <= ASMC_REGISTER_BYTES - bytes);
+#ifdef ASMC_SCALAR_REGISTERS
+  if (bytes == 8 && offset % 8 == 0) return ASMC_REG_WORD(s, offset);
+#endif
   uint64_t result = 0;
   for (unsigned i = 0; i < bytes; ++i)
-    result |= (uint64_t)s->registers[offset + i] << (8 * i);
+    result |= (uint64_t)ASMC_REG_BYTE(s, offset + i) << (8 * i);
   return result;
 }
 void asmc_set_reg(struct asmc_state *s, unsigned offset, unsigned bytes, uint64_t value) {
   assert(bytes >= 1 && bytes <= 8 && offset <= ASMC_REGISTER_BYTES - bytes);
+#ifdef ASMC_SCALAR_REGISTERS
+  if (bytes == 8 && offset % 8 == 0) {
+    ASMC_REG_WORD(s, offset) = value;
+    return;
+  }
+#endif
   for (unsigned i = 0; i < bytes; ++i)
-    s->registers[offset + i] = (uint8_t)(value >> (8 * i));
+    ASMC_REG_BYTE(s, offset + i) = (uint8_t)(value >> (8 * i));
 }
 #ifndef ASMC_OBJECT_MEMORY
 static uint64_t checked_offset(const struct asmc_state *s, uint64_t address, unsigned bytes) {

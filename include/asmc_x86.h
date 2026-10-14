@@ -50,13 +50,13 @@ static inline void asmc_setup_stack(struct asmc_state *s, uint64_t sp) {
   asmc_store(s, sp, 8, s->return_address);
 }
 static inline void asmc_assume_flags(const struct asmc_state *s) {
-  __CPROVER_assume(s->registers[ASMC_CF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_PF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_AF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_ZF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_SF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_OF] <= 1);
-  __CPROVER_assume(s->registers[ASMC_DF] <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_CF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_PF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_AF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_ZF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_SF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_OF) <= 1);
+  __CPROVER_assume(ASMC_REG_BYTE(s, ASMC_DF) <= 1);
 }
 static const unsigned asmc_sysv_preserved[] = {
   ASMC_RBX, ASMC_RBP, ASMC_R12, ASMC_R13, ASMC_R14, ASMC_R15

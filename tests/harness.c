@@ -22,7 +22,7 @@ void harness(void) {
   struct asmc_state s;
   s.ram = memory.bytes; s.ram_base = 0x1000; s.ram_size = sizeof(memory.bytes);
   asmc_assume_flags(&s);
-  s.registers[ASMC_DF] = 0; /* SysV requires a clear direction flag. */
+  ASMC_REG_BYTE(&s, ASMC_DF) = 0; /* SysV requires a clear direction flag. */
   asmc_setup_stack(&s, 0x10c8);
   uint64_t x = nondet_u64(), y = nondet_u64();
   unsigned n = nondet_unsigned();

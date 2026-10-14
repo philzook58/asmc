@@ -56,7 +56,10 @@ static inline void asmc_riscv_arg_ptr(struct asmc_state *s, unsigned index, cons
   asmc_riscv_arg(s, index, (uintptr_t)p);
 }
 static inline void *asmc_riscv_result_ptr(const struct asmc_state *s) {
-  return (void *)(uintptr_t)asmc_riscv_result(s);
+  /* Keep the narrowing step explicit for CBMC 6.11's SMT pointer-cast bug.
+     Fix: philzook58/cbmc, branch fix/smt2-integer-pointer-width. */
+  uintptr_t address = (uintptr_t)asmc_riscv_result(s);
+  return (void *)address;
 }
 static inline struct asmc_riscv_frame asmc_riscv_enter_objects(
     struct asmc_state *s, uint8_t *stack, uint64_t size) {

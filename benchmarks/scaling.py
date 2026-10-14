@@ -147,11 +147,13 @@ def solver_profiles(names, overrides, tools):
     return profiles, missing
 
 
-def build(case, directory, tools, timeout, memory_limit):
+def build(case, directory, tools, timeout, memory_limit, scalar_registers=False):
     directory.mkdir()
     (directory / "target.S").write_text(case.assembly())
     (directory / "objects.h").write_text(case.objects_header() if case.family == "objects" else "")
     flags = ["-I", ROOT / "include", "-I", directory, *case.defines()]
+    if scalar_registers:
+        flags.append("-DASMC_SCALAR_REGISTERS")
     stages = [
         ("compile", ["gcc", "-nostdlib", "-no-pie", "-Wl,-e,target", directory / "target.S", "-o", directory / "target.elf"]),
         ("seed", [tools / "goto-cc", *flags, "-c", ROOT / "runtime/runtime.c", "-o", directory / "seed.gb"]),
@@ -176,7 +178,7 @@ def write_results(output, rows, manifest):
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     if rows:
         with (output / "results.csv").open("w") as stream:
-            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys(), lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
 
@@ -194,6 +196,7 @@ def main():
     parser.add_argument("--timeout", type=float, default=10, help="seconds per checker run (default: 10)")
     parser.add_argument("--memory-limit", type=int, default=1024, help="MiB address-space cap per process (default: 1024)")
     parser.add_argument("--smoke", action="store_true", help="controls plus two tiny semantic checks; no performance thresholds")
+    parser.add_argument("--scalar-registers", action="store_true", help="use blocked register storage, leaving data arrays unchanged")
     args = parser.parse_args()
     if args.repetitions < 1 or args.timeout <= 0 or args.memory_limit < 128:
         parser.error("positive repetitions/timeout and at least 128 MiB required")
@@ -220,11 +223,11 @@ def main():
     manifest = {"host": platform.platform(), "cpu": cpu, "tools": str(tools),
                 "solvers": solvers, "missing_solvers": missing, "variants": variants,
                 "timeout_s": args.timeout, "memory_limit_mib": args.memory_limit,
-                "repetitions": args.repetitions, "profile_validated": {}}
+                "repetitions": args.repetitions, "scalar_registers": args.scalar_registers, "profile_validated": {}}
     rows, valid = [], {(name, variant): True for name in solvers for variant in variants}
     for index, case in enumerate(chosen):
         directory = output / case.name
-        costs = build(case, directory, tools, max(30, args.timeout), args.memory_limit)
+        costs = build(case, directory, tools, max(30, args.timeout), args.memory_limit, args.scalar_registers)
         for variant in variants:
             model = directory / "check.gb"
             pre_s = 0
@@ -258,6 +261,7 @@ def main():
                            "memory": case.memory, "dispatch": case.dispatch, "fixed_index": case.fixed_index,
                            "bound": case.bound, "control": index < 4, "expected": expected,
                            "solver": name, "variant": variant, "repetition": repetition,
+                           "scalar_registers": args.scalar_registers,
                            "model_bytes": model.stat().st_size, "build_s": sum(c["wall_s"] for c in costs.values()),
                            "preprocess_s": pre_s, **process, **stats}
                     rows.append(row)

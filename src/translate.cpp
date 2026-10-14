@@ -3,6 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/bitvector_expr.h>
 #include <util/bitvector_types.h>
+#include <util/byte_operators.h>
 #include <util/pointer_expr.h>
 #include <util/std_expr.h>
 #include <util/simplify_expr.h>
@@ -165,13 +166,21 @@ class Translator {
         offset -= 0x2000; // Compact GPR bank; raw p-code/listings retain SLEIGH offsets.
       }
       auto regs = field("registers");
-      const auto &array = to_array_type(regs.type());
-      auto size = numeric_cast_v<uint64_t>(to_constant_expr(array.size()));
+      bool words = regs.type().id() == ID_struct_tag;
+      auto size = words ? 0x300 : numeric_cast_v<uint64_t>(to_constant_expr(to_array_type(regs.type()).size()));
       if (offset > size || node.size > size - offset)
         throw std::runtime_error("unsupported register bank (SIMD/system register)");
       // FS/GS segment bases are outside this prototype's flat addressing model.
       if (!image.riscv && offset >= 0x100 && offset < 0x200)
         throw std::runtime_error("segment/TLS registers are unsupported");
+      if (words) {
+        auto word_index = (offset + i) / 8;
+        const auto &bank = ns.follow_tag(to_struct_tag_type(regs.type()));
+        auto name = "block" + std::to_string(word_index / 32);
+        auto block = member_exprt(regs, name, bank.component_type(name));
+        auto word = index_exprt(block, number(word_index % 32));
+        return byte_extract_exprt(ID_byte_extract_little_endian, word, number((offset + i) % 8), 8, byte_type);
+      }
       return index_exprt(regs, number(offset + i));
     }
     if (node.space == Space::unique) {
@@ -182,11 +191,31 @@ class Translator {
     }
     throw std::runtime_error("unsupported varnode address space");
   }
+  std::optional<exprt> register_part(const Varnode &node, uint64_t pc) {
+    if (node.space != Space::reg || node.size > 8) return {};
+    auto first = byte(node, pc, 0);
+    if (first.id() != ID_byte_extract_little_endian) return {}; // Flat byte bank.
+    const auto &extract = to_byte_extract_expr(first);
+    auto offset = numeric_cast_v<unsigned>(to_constant_expr(extract.offset()));
+    if (offset + node.size > 8) return {}; // Cross-cell access: use bytes.
+    if (node.size == 8) return extract.op();
+    return byte_extract_exprt(ID_byte_extract_little_endian, extract.op(), extract.offset(),
+                             8, unsignedbv_typet(node.size * 8));
+  }
   exprt read(const Varnode &node, uint64_t pc) {
     if (node.size == 0 || node.size > 16) throw std::runtime_error("unsupported varnode width (maximum 128 bits)");
     auto type = unsignedbv_typet(node.size * 8);
     if (node.space == Space::constant) return number(node.offset, type);
     if (node.space == Space::ram) return load(number(node.offset), node.size);
+    if (auto part = register_part(node, pc)) return *part;
+    // Wider registers span cells; combine them without splitting each into bytes.
+    if (node.space == Space::reg && node.size % 8 == 0 && node.offset % 8 == 0 &&
+        field("registers").type().id() == ID_struct_tag) {
+      exprt::operandst words;
+      for (unsigned i = node.size; i != 0; i -= 8)
+        words.push_back(*register_part({node.space, node.offset + i - 8, 8}, pc));
+      return concatenation_exprt(words, type);
+    }
     exprt::operandst bytes;
     for (unsigned i = node.size; i-- > 0; )
       bytes.push_back(typecast_exprt(byte(node, pc, i), byte_type));
@@ -196,6 +225,21 @@ class Translator {
                    std::optional<exprt> offset = {}) {
     // Snapshot once, BEFORE any byte is overwritten (e.g. AL aliases RAX).
     auto saved = snapshot(value);
+    if (!offset) {
+      if (auto part = register_part(node, pc)) {
+        function.body.add(goto_programt::make_assignment(*part, typecast_exprt(saved, part->type()), location));
+        return;
+      }
+      if (node.space == Space::reg && node.size % 8 == 0 && node.offset % 8 == 0 &&
+          field("registers").type().id() == ID_struct_tag) {
+        for (unsigned i = 0; i < node.size; i += 8) {
+          auto part = *register_part({node.space, node.offset + i, 8}, pc);
+          function.body.add(goto_programt::make_assignment(part,
+            typecast_exprt(lshr_exprt(saved, number(i * 8)), part.type()), location));
+        }
+        return;
+      }
+    }
     for (unsigned i = 0; i < node.size; ++i) {
       auto lhs = offset ? memory_byte(*offset, i) : byte(node, pc, i);
       exprt rhs = typecast_exprt(lshr_exprt(saved, number(i * 8)), lhs.type());
@@ -387,11 +431,25 @@ void translate(goto_modelt &model, const Instructions &instructions, const std::
     throw std::runtime_error("template has an incompatible " + target + " signature");
   const auto &state = ns.follow_tag(to_struct_tag_type(to_pointer_type(parameter).base_type()));
   const auto &registers = state.component_type("registers");
-  if (registers.id() != ID_array || to_array_type(registers).element_type().id() != ID_unsignedbv ||
-      to_unsignedbv_type(to_array_type(registers).element_type()).get_width() != 8 ||
-      !to_array_type(registers).size().is_constant() ||
-      numeric_cast_v<uint64_t>(to_constant_expr(to_array_type(registers).size())) != 0x300)
-    throw std::runtime_error("template must have registers[0x300] of unsigned bytes");
+  // Accept exactly the flat or blocked public layout; reject malformed templates
+  // before Translator uses checked casts. No architecture-specific partitioning.
+  auto dimension = [](const typet &type, unsigned size) {
+    return type.id() == ID_array && to_array_type(type).size().is_constant() &&
+      numeric_cast_v<uint64_t>(to_constant_expr(to_array_type(type).size())) == size;
+  };
+  auto array_of = [&](const typet &type, unsigned size, unsigned width) {
+    return dimension(type, size) && to_array_type(type).element_type().id() == ID_unsignedbv &&
+      to_unsignedbv_type(to_array_type(type).element_type()).get_width() == width;
+  };
+  bool valid = array_of(registers, 0x300, 8);
+  if (registers.id() == ID_struct_tag) {
+    const auto &bank = ns.follow_tag(to_struct_tag_type(registers));
+    valid = bank.components().size() == 3;
+    for (const auto *name : {"block0", "block1", "block2"})
+      valid = valid && array_of(bank.component_type(name), 32, 64);
+  }
+  if (!valid)
+    throw std::runtime_error("template must have uint8_t registers[0x300] or three uint64_t register blocks[32]");
   const auto &ram = state.component_type("ram");
   if (ram.id() != ID_pointer || to_pointer_type(ram).base_type().id() != ID_unsignedbv ||
       to_unsignedbv_type(to_pointer_type(ram).base_type()).get_width() != 8)
