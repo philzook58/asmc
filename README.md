@@ -150,6 +150,13 @@ are printed directly, followed by CBMC's violated assertion. Helper/machine step
 are omitted from this view; --full-trace prints the complete CBMC trace and
 --compact-trace prints CBMC's own compact trace. The unfiltered CBMC output always
 remains in cbmc.log.
+For generated-harness postconditions, the brief view shows the `in.FIELD` and
+`out.FIELD` references used in the pre/postconditions, rather than every register
+alias. Safety/ABI failures retain the full-width register context. This filters
+only the display; all views remain in the harness and raw trace. The postcondition
+is printed once, without repeating CBMC's expanded formula. Use `--beautify` to
+ask the solver for simpler counterexample values; large arbitrary values alone
+do not indicate a harder check.
 Use --output-dir to choose an empty directory. Existing results are preserved.
 All relative input paths and include directories are resolved from your current
 directory, so the command can be used from another project.

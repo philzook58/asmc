@@ -1,15 +1,20 @@
 """Generate ordinary C; goto-cc parses CLI expressions and checks their types."""
 import json
 
+X86_REGISTERS = "rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15".split()
+X86_FLAGS = "cf pf af zf sf of df".split()
+RISCV_REGISTERS = ("zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 "
+                   "s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6").split()
+
 
 def generate(architecture, bits, entry, stack_size, preconditions, postconditions):
     aliases = []
     if architecture == "x86":
-        names = "rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15".split()
+        names = X86_REGISTERS
         registers = [(name, "uint64_t", f"asmc_get_reg(&s, ASMC_{name.upper()}, 8)")
                      for name in names]
         registers += [(name, "uint8_t", f"asmc_get_reg(&s, ASMC_{name.upper()}, 1)")
-                      for name in "cf pf af zf sf of df".split()]
+                      for name in X86_FLAGS]
         views = [
             ("rax", "eax", "ax", "al"), ("rcx", "ecx", "cx", "cl"),
             ("rdx", "edx", "dx", "dl"), ("rbx", "ebx", "bx", "bl"),
@@ -24,8 +29,7 @@ def generate(architecture, bits, entry, stack_size, preconditions, postcondition
                     for name, parent in (("ah", "rax"), ("ch", "rcx"), ("dh", "rdx"), ("bh", "rbx"))]
         abi = "sysv"
     else:
-        names = ("zero ra sp gp tp t0 t1 t2 s0 s1 a0 a1 a2 a3 a4 a5 a6 a7 "
-                 "s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 t3 t4 t5 t6").split()
+        names = RISCV_REGISTERS
         registers = [(name, f"uint{bits}_t", f"asmc_riscv_reg(&s, {index})")
                      for index, name in enumerate(names)]
         abi = "riscv"

@@ -10,7 +10,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from demo import generate
+from demo import generate, X86_REGISTERS, X86_FLAGS, RISCV_REGISTERS
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,7 +22,8 @@ def positive(value):
     return number
 
 
-def print_counterexample(text, source_files, listing, full=False, first_only=False, demo=None):
+def print_counterexample(text, source_files, listing, full=False, first_only=False, demo=None,
+                         demo_fields=None, demo_defaults=None, demo_entry="harness"):
     start = re.search(r"^Trace for .*:$", text, re.MULTILINE)
     if not start:
         return
@@ -38,9 +39,12 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
         if following:
             trace = trace[:first_line + following.start()]
     label = "first failing property; " if first_only else ""
-    print("Counterexample (" + label + "harness/reference values; use --full-trace for machine steps):")
+    values = "contract register views" if demo and demo_fields else "harness/reference values"
+    print("Counterexample (" + label + values + "; use --full-trace for all values and machine steps):")
     instructions = listing.read_text().splitlines()
     recent = deque(maxlen=6)
+    fields = demo_defaults
+    post_trace = False
     # Keep CBMC's state/value format, omitting helper and p-code temporaries.
     # Always retain violated properties, including failures inside the machine model.
     for block in re.split(r"\n\s*\n", trace):
@@ -50,9 +54,18 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
                 for instruction in recent:
                     print("    " + instruction)
             recent.clear()
-            print(block + "\n")
+            lines = block.splitlines()
+            # Generated post descriptions already contain the exact user
+            # expression. Keep CBMC's expanded formula in the full trace.
+            if post_trace and len(lines) >= 4 and lines[2].strip().startswith("post: "):
+                lines = lines[:3]
+            elif len(lines) == 4 and lines[2].strip().removeprefix("assertion ") == lines[3].strip():
+                lines = lines[:3]
+            print("\n".join(lines) + "\n")
         elif block.startswith("Trace for "):
             recent.clear()
+            post_trace = bool(demo and block.startswith(f"Trace for {demo_entry}.assertion."))
+            fields = demo_fields if post_trace and demo_fields else demo_defaults
             print(block + "\n")
         elif block.startswith("State ") and "file " + str(listing) + " function " in block:
             location = re.search(r" line (\d+) thread", block.splitlines()[0])
@@ -70,6 +83,8 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
                 location = re.search(r"file (.*?) function .* line (\d+) thread", lines[0])
                 if location:
                     if demo and Path(location[1]) == demo and not value.startswith(("in.", "out.")):
+                        continue
+                    if demo and Path(location[1]) == demo and fields is not None and value.split("=", 1)[0] not in fields:
                         continue
                     print(f"  {Path(location[1]).name}:{location[2]}  {value[:240]}" + (" ..." if len(value) > 240 else ""))
 
@@ -331,7 +346,10 @@ def main(version):
             brief_objects = args.memory == "objects" and not (args.full_trace or args.compact_trace)
             shown = failures[:5] if brief_objects else failures
             for prop, description in shown:
-                print(f"  [{prop}] {description}")
+                if not args.harness and not (args.full_trace or args.compact_trace) and " post: " in description:
+                    print(f"  [{prop}] {description.split(' post: ', 1)[0]}: FAILURE")
+                else:
+                    print(f"  [{prop}] {description}")
                 line = re.search(r"\bline (\d+)\b", description)
                 if prop.startswith(args.target + ".") and line:
                     listing = Path(str(lifted) + ".asm").read_text().splitlines()
@@ -345,9 +363,16 @@ def main(version):
                 print("Object mode requires encoded C pointers: check allocation lifetime, complete access bounds, "
                       "and pointer truncation. Fixed ELF data addresses are not mapped in this mode.")
                 print("For setup, use the ABI's *_enter_objects stack helper and *_arg_ptr pointer arguments.")
+            # This is a display filter only: every view remains in the generated
+            # harness and raw trace. No expressions or solver inputs are changed.
+            demo_fields = {f"{snapshot}.{name}" for snapshot, name in re.findall(
+                r"\b(in|out)\s*\.\s*([A-Za-z_][A-Za-z_0-9]*)\b", "\n".join(args.pre + args.post))}
+            defaults = X86_REGISTERS + X86_FLAGS if architecture == "x86" else RISCV_REGISTERS
+            demo_defaults = {f"{snapshot}.{name}" for snapshot in ("in", "out") for name in defaults}
             print_counterexample(text, [harness, *(path.resolve() for path in args.reference)],
                                  Path(str(lifted) + ".asm"), full=args.full_trace or args.compact_trace,
-                                 first_only=brief_objects, demo=harness if not args.harness else None)
+                                 first_only=brief_objects, demo=harness if not args.harness else None,
+                                 demo_fields=demo_fields, demo_defaults=demo_defaults, demo_entry=args.entry)
             print(f"Trace and details: {output / 'cbmc.log'}")
             if any(unwinds):
                 loops = [prop.rsplit(".unwind.", 1) for prop, _ in failures if ".unwind." in prop]

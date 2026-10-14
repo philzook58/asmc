@@ -52,6 +52,19 @@ def main():
                                          "--post", "out.eax == in.edi + 1", "--post", "out.eax == 0"])
         text, _ = check("wrong_dword", elf, "inc_bad", ["--post", "out.eax == in.edi + 1"], 10)
         assert "in.edi=" in text and "out.eax=" in text
+        assert "in.rdi=" not in text and "out.rax=" not in text and "in.al=" not in text
+        assert text.count("out.eax == in.edi + 1") == 1
+        text, _ = check("wrong_dword_full", elf, "inc_bad",
+                        ["--post", "out.eax == in.edi + 1", "--full-trace"], 10)
+        assert "in.rdi=" in text and "in.dil=" in text and "out.eax=" in text
+        text, _ = check("multiple_posts", elf, "inc", ["--post", "out.rax == out.rdi + 1",
+                        "--post", "out.rax == in.rax"], 10)
+        assert "in.rax=" in text and "out.rax=" in text and "out.rdi=" in text
+        assert "in.eax=" not in text and "in.r15=" not in text
+        assert text.count("out.rax == in.rax") == 1
+        text, _ = check("custom_entry_alias", elf, "inc_bad", ["--entry", "entry",
+                        "--post", "out.eax == in.edi + 1"], 10)
+        assert "in.edi=" in text and "in.rdi=" not in text
         check("byte_aliases", elf, "alias_byte", ["--post", "out.al == 0x34 && out.ah == 0x12",
               "--post", "out.ax == 0x1234", "--post", "(out.rax >> 16) == (in.rdi >> 16)"])
         check("word_aliases", elf, "alias_word", ["--post", "out.ax == 0x4321",
@@ -75,6 +88,7 @@ def main():
         assert "unexpected return address" in text
         text, _ = check("unconstrained_pointer", elf, "read64", expected=10)
         assert "memory access" in text
+        assert "in.rdi=" in text and "in.edi=" not in text
         check("bounded_pointer", elf, "read64", ["--pre", "in.rdi == 0x1000",
               "--post", "out.rax == asmc_load(&s, in.rdi, 8)"])
         check("object_stack", elf, "inc", [*post, "--memory", "objects"])
