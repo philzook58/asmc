@@ -78,17 +78,47 @@ answer:
         assert "ERROR:" in text and not (output / "cbmc.log").exists()
     print("PASS .S preprocessing, compiler/env quoting and failures", flush=True)
 
-    # Size-free assembly needs an exclusive end address from the linked ELF.
+    # Unsized functions infer a lifting window; an explicit end overrides it.
     source = tmp / "unsized.s"
     source.write_text('.text\n.globl answer, answer_end\nanswer:\nmov $42,%rax\nret\nanswer_end:\n'
                       '.section .note.GNU-stack,"",@progbits\n')
-    text, output = check("missing_size", expected=2)
-    assert "exclusive linked virtual address, not a byte count" in text and "nm -n " in text
+    text, output = check("missing_size")
+    assert "ASMC lift range:" in text and ".text" in text
+    check("unsized_wrong", "out.rax == 43", 10)
     symbols = run(["nm", "-n", output / "target.elf"])
     end = next(line.split()[0] for line in symbols.splitlines() if line.endswith(" answer_end"))
-    check("end", options=["--end-address", "0x" + end])
-    check("bad_end", expected=2, options=["--end-address", "1"])
-    print("PASS end-label address and invalid range", flush=True)
+    check("end", options=["--lift-end-address", "0x" + end])
+    check("bad_end", expected=2, options=["--lift-end-address", "1"])
+    check("excludes_return", expected=2, options=["--lift-end-address", hex(int(end, 16) - 1)])
+    # Padding broadens the available window, without executing past RET.
+    source.write_text(source.read_text().replace('answer_end:', 'answer_end:\nud2\nnop\nnop\nnop'))
+    _, output = check("padding")
+    listing = (output / "lifted.gb.asm").read_text()
+    assert "MOV RAX,0x2a" in listing and "RET" in listing and "UD2" not in listing and "NOP" not in listing
+    check("loose_end", options=["--lift-end-address", hex(int(end, 16) + 1)])
+    print("PASS inferred/explicit ranges, dead padding and excluded return", flush=True)
+
+    # Section end is the fallback, even when another executable section shares
+    # the same LOAD segment. Leaving it cannot silently end the check.
+    source.write_text('.text\n.globl answer, helper\nanswer:\nmov $42,%rax\n'
+                      '.section .asmc_other,"ax",@progbits\nhelper:\nret\n'
+                      '.section .note.GNU-stack,"",@progbits\n')
+    text, _ = check("section_edge", expected=2)
+    assert "control flow leaves admitted lifting ranges at 0x" in text
+    check("section_helper", options=["--callee", "helper"])
+    # Same-section unsized callees must not overlap the caller's window.
+    source.write_text('.text\n.globl answer, helper\nanswer:\nsub $8,%rsp\ncall helper\n'
+                      'add $8,%rsp\nret\nhelper:\nmov $42,%rax\nret\n'
+                      '.section .note.GNU-stack,"",@progbits\n')
+    text, _ = check("unsized_call", options=["--callee", "helper", "--unwindset", "asmc_target.0:4",
+                                           "--max-field-sensitivity-array-size", "768"])
+    assert text.count("ASMC lift range:") == 2
+    # Metadata still wins: adjacent bytes cannot repair a truncated .size.
+    source.write_text(source.read_text().replace('answer:\n', '.type answer,@function\nanswer:\n') +
+                      '\n.size answer,1\n')
+    text, _ = check("size_wins", expected=2)
+    assert "instruction extends beyond the selected lifting window" in text
+    print("PASS section bounds, multiple unsized functions and symbol-size priority", flush=True)
 
     if shutil.which("riscv64-unknown-elf-gcc"):
         for bits in (32, 64):
@@ -98,4 +128,8 @@ answer:
             riscv = dict(env, CC="riscv64-unknown-elf-gcc",
                          CFLAGS=f"-march=rv{bits}imc -mabi=" + ("ilp32" if bits == 32 else "lp64"))
             check("rv" + str(bits), "out.a0 == 42", environment=riscv)
+            source.write_text(source.read_text().replace('.type answer,@function\n', '')
+                              .replace('.size answer,.-answer\n', ''))
+            text, _ = check("rv" + str(bits) + "-unsized", "out.a0 == 42", environment=riscv)
+            assert "ASMC lift range:" in text
         print("PASS RV32/RV64 assembly input through CC", flush=True)

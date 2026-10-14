@@ -132,7 +132,7 @@ def main(version):
                         help="seconds allowed per tool (default: 300)")
     parser.add_argument("--memory-limit", type=positive,
                         help="address-space limit in MiB per tool/solver process")
-    parser.add_argument("--end-address", help="exclusive end virtual address in linked ELF (decimal or 0xHEX); prefer .type/.size")
+    parser.add_argument("--lift-end-address", help="exclusive lifting-window end in linked ELF; default: symbol size or executable section end; does not stop execution")
     for option in ("sla", "pspec"):
         parser.add_argument("--" + option, help="forwarded to the lifter")
     parser.add_argument("--lifter", type=Path,
@@ -210,7 +210,7 @@ def main(version):
                 raise
         text = log.read_text(errors="replace")
         for line in text.splitlines():
-            if line.startswith("ASMC warning:"):
+            if line.startswith(("ASMC warning:", "ASMC lift range:")):
                 print(line, flush=True)
         if stage != "cbmc" and process.returncode != 0:
             print("\n".join(text.splitlines()[-40:]), file=sys.stderr)
@@ -272,7 +272,7 @@ def main(version):
             lift_options.append("--dispatch")
         for callee in args.callee:
             lift_options += ["--callee", callee]
-        for option in ("end-address", "sla", "pspec"):
+        for option in ("lift-end-address", "sla", "pspec"):
             value = getattr(args, option.replace("-", "_"))
             if value is not None:
                 lift_options += ["--" + option, value]

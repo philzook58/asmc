@@ -130,8 +130,12 @@ Instructions lift(const ElfImage &image, const std::string &sla, const std::stri
   pending.push(image.entry);
   for (auto destination : image.indirect_targets) pending.push(destination);
   auto enqueue = [&](uint64_t address) {
-    if (!image.function_at(address))
-      throw std::runtime_error("control flow leaves admitted function ranges at " + std::to_string(address) + "; use --callee NAME to admit another function");
+    if (!image.function_at(address)) {
+      std::ostringstream error;
+      error << "control flow leaves admitted lifting ranges at 0x" << std::hex << address
+            << "; check --lift-end-address/ELF size, or use --callee NAME to admit another function";
+      throw std::runtime_error(error.str());
+    }
     pending.push(address);
   };
   while (!pending.empty()) {
@@ -143,7 +147,7 @@ Instructions lift(const ElfImage &image, const std::string &sla, const std::stri
     int length = engine.oneInstruction(capture, address);
     engine.printAssembly(assembly, address);
     if (length <= 0 || static_cast<uint64_t>(length) > image.function_at(pc)->end - pc)
-      throw std::runtime_error("instruction extends beyond the selected function range");
+      throw std::runtime_error("instruction extends beyond the selected lifting window");
     Instruction insn{pc, static_cast<unsigned>(length), assembly.text, std::move(capture.ops), {}};
     auto next = result.lower_bound(pc);
     if ((next != result.end() && pc + length > next->first) ||

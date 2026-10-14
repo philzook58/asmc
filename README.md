@@ -73,14 +73,22 @@ entry point. `assemble.log`, the command, and `target.elf` are retained alongsid
 the check. Environment flags affect that native build; use `-I`/`-D` for the C
 specifications. Existing ELF inputs still go straight to lifting.
 
-GNU assembly should annotate functions with `.type foo,@function` and
-`.size foo,.-foo`; no end address is then needed. If size metadata is absent,
-`--end-address 0x...` is the **exclusive end virtual address in the linked ELF**,
-not an instruction count or a byte offset in the source/object file. Put a
-label such as `foo_end:` immediately after the final instruction and read its
-address with `nm -n OUTPUT/target.elf`. Pass that address on the next check.
-`objdump -d OUTPUT/target.elf` disassembles the linked code; GNU objdump cannot
-assign linked addresses to a textual `.s` file.
+ASMC normally takes the lifting range from the ELF function's size, supplied
+by `.type foo,@function` and `.size foo,.-foo` in GNU assembly. When the symbol
+has no size, it uses the end of the containing executable section (usually
+`.text`) as the available code window and reports that range. For several
+admitted functions in one section, inferred windows end at the next admitted
+entry to keep them disjoint. Only reachable instructions are lifted: padding,
+other routines and embedded data are not decoded unless control flow reaches them.
+
+`--lift-end-address 0x...` overrides the entry's **exclusive lifting-window end**
+in the linked ELF. It does not insert an execution stop. Reaching a boundary
+without returning or transferring to another admitted range is an error.
+The postcondition and ABI checks still run after a normal return. Existing
+ELF size metadata remains authoritative unless explicitly overridden.
+Use `nm -n OUTPUT/target.elf` to read a label's linked address, or
+`objdump -d OUTPUT/target.elf` to inspect the code. No address calculation is
+needed for ordinary `.s` demos. The former `--end-address` name is removed.
 
 The default harness selects x86-64 SysV, RV32 or RV64 from ELF. It supplies
 a 256-byte stack (change with --stack-size, minimum 16), a valid return sentinel,
@@ -352,10 +360,10 @@ stack scratch region from that comparison.
   Optional --rodata embeds immutable `.rodata*` bytes at their linked addresses.
   Relocatable `.o` inputs report a shell-quoted linker command for the selected
   symbol and architecture; ASMC does not execute the suggested command.
-* Function sizes from ELF symbols, or --end-address when size information
-  is absent for the entry. Repeat --callee NAME to admit sized helper functions
-  in the same ELF. Reachable bytes and explicitly admitted indirect targets
-  in these ranges are decoded.
+* Lifting windows use ELF function sizes, or the containing executable section
+  for unsized symbols. --lift-end-address overrides the entry window. Repeat
+  --callee NAME to admit helper functions in the same ELF. Reachable bytes and
+  explicitly admitted indirect targets in these ranges are decoded.
 * Integer arithmetic up to 128 bits: copy, extensions, add/subtract/multiply,
   comparisons, carry/overflow, bitwise and Boolean operations, shifts, pieces,
   population count and leading-zero count.

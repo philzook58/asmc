@@ -23,15 +23,15 @@ int main(int argc, char **argv) {
     if (argc == 1 || (argc == 2 && std::string(argv[1]) == "--help")) {
       std::cout << "Lift ELF instructions to a GOTO object (does not verify):\n"
                    "  asmc-lift FILE.elf --function NAME --template SEED.gb -o OUT.gb\n"
-                   "       [--target GOTO_NAME] [--callee NAME] [--end-address ADDRESS]\n"
+                   "       [--target GOTO_NAME] [--callee NAME] [--lift-end-address ADDRESS]\n"
                    "       [--sla FILE] [--pspec FILE] [--memory ram|objects] [--rodata]\n"
                    "       [--indirect-target SYMBOL_OR_ADDRESS] [--dispatch]\n\n"
                    "  Compile SEED.gb from runtime/runtime.c with goto-cc -I include -c.\n"
                    "  For --memory objects, compile the runtime with -DASMC_OBJECT_MEMORY.\n"
                    "  Architecture is selected from ELF; use -m32 for an RV32 template.\n"
                    "  Outputs OUT.gb and its address/p-code listing OUT.gb.asm.\n"
-                   "  --end-address is the exclusive linked virtual address, not a byte count.\n"
-                   "  Prefer .type/.size; use nm -n FILE.elf to read an explicit end label.\n"
+                   "  Unsized symbols use the containing executable section as a lifting window.\n"
+                   "  --lift-end-address overrides its exclusive end; it is not an execution stop.\n"
                    "  Use 'asmc --help' for the top-level verification driver.\n";
       return argc == 1 ? 2 : 0;
     }
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
       }
       else if (key == "--sla") sla = value;
       else if (key == "--pspec") pspec = value;
-      else if (key == "--end-address") {
+      else if (key == "--lift-end-address") {
         size_t used;
         end = std::stoull(value, &used, 0);
         if (used != value.size()) throw std::runtime_error("invalid end address");
@@ -70,6 +70,10 @@ int main(int argc, char **argv) {
     if (object_memory && rodata)
       throw std::runtime_error("--memory objects cannot be combined with --rodata; no ELF data fallback");
     auto image = ElfImage::load(elf, function, end, callees, indirect_targets, rodata);
+    for (const auto &range : image.functions) if (!range.inferred_section.empty())
+      std::cout << "ASMC lift range: " << range.name << " has no ELF size; reachable code window in "
+                << range.inferred_section << " [0x" << std::hex << range.begin << ", 0x" << range.end
+                << std::dec << ")\n";
     auto directory = std::string(ASMC_SPEC_DIR) + (image.riscv ? "/RISCV" : "/x86") + "/data/languages/";
     if (sla.empty()) sla = directory + (image.riscv ? (image.address_bits == 32 ? "riscv.ilp32d.sla" : "riscv.lp64d.sla") : "x86-64.sla");
     if (pspec.empty()) pspec = directory + (image.riscv ? (image.address_bits == 32 ? "RV32.pspec" : "RV64.pspec") : "x86-64.pspec");

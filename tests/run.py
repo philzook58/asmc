@@ -110,7 +110,7 @@ def main():
                 ("unsupported_div", "INT_DIV"), ("unsupported_simd", "register"),
                 ("unsupported_call", "CALL"), ("unsupported_indirect", "BRANCHIND"),
                 ("unsupported_tls", "segment"), ("outside_function", "range"),
-                ("truncated", "extends"), ("missing_size", "no size")
+                ("truncated", "extends")
             ]:
                 out = tmp / "rejected.gb"
                 output = run([lifter, elf, "--function", name, "--template", seed, "-o", out], expected=2)
@@ -123,7 +123,12 @@ def main():
             assert "relocatable ELF (.o)" in output and "Link it first:" in output
             symbols = run(["nm", elf])
             end = next(line.split()[0] for line in symbols.splitlines() if line.endswith(" missing_size_end"))
-            run([lifter, elf, "--function", "missing_size", "--end-address", "0x" + end,
+            inferred = run([lifter, elf, "--function", "missing_size", "--template", seed,
+                            "-o", tmp / "inferred.gb"])
+            assert "ASMC lift range:" in inferred and ".text" in inferred
+            listing = (tmp / "inferred.gb.asm").read_text()
+            assert "MOV RAX,RDI" in listing and "RET" in listing
+            run([lifter, elf, "--function", "missing_size", "--lift-end-address", "0x" + end,
                  "--template", seed, "-o", tmp / "explicit.gb"])
             print("PASS ELF input and explicit range checks", flush=True)
             for source in ["void asmc_target(int *s) {}", "void other(void) {}"]:

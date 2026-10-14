@@ -8,6 +8,7 @@ struct FunctionImage {
   std::string name;
   uint64_t begin, end;
   std::vector<unsigned char> bytes;
+  std::string inferred_section;
 };
 struct ReadOnlyImage {
   uint64_t begin;

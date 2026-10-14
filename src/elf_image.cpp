@@ -71,12 +71,30 @@ ElfImage ElfImage::load(const std::string &path, const std::string &function,
     if (symbol == symbols_found.end()) throw std::runtime_error("function symbol not found: " + name);
     auto [start, size] = symbol->second;
     auto limit = name == function ? explicit_end : std::optional<uint64_t>{};
-    if (!limit && size == 0)
-      throw std::runtime_error("function " + name + " has no size; add .type " + name +
-        ",@function and .size " + name + ",.-" + name +
-        (name == function ?
-          "\nOr use --end-address ADDRESS: the exclusive linked virtual address, not a byte count." : "") +
-        "\nAn end label after the function gives this address; inspect the linked ELF with:\n  nm -n " + shell_quote(path));
+    std::string inferred_section;
+    if (!limit && size == 0) {
+      // A code window, not an inferred function boundary. Only reachable bytes
+      // are decoded; reaching the window's end is still an error, not a return.
+      for (const auto &section : elf.sections) {
+        auto base = section->get_address(), length = section->get_size();
+        if (section->get_type() != ELFIO::SHT_PROGBITS ||
+            !(section->get_flags() & ELFIO::SHF_ALLOC) ||
+            !(section->get_flags() & ELFIO::SHF_EXECINSTR) ||
+            start < base || start - base >= length) continue;
+        if (length > UINT64_MAX - base) throw std::runtime_error("executable section address range wraps");
+        limit = base + length;
+        inferred_section = section->get_name();
+        break;
+      }
+      if (!limit)
+        throw std::runtime_error("function " + name + " has no size or containing executable section; "
+          "add .type/.size or use --lift-end-address for the entry");
+      // Keep admitted windows disjoint when several unsized functions share a
+      // section. Internal labels/indirect targets are not function boundaries.
+      for (const auto &other : symbols_found)
+        if (wanted.count(other.first) && other.second.first > start && other.second.first < *limit)
+          limit = other.second.first;
+    }
     if (!limit && size > UINT64_MAX - start) throw std::runtime_error("function address range wraps");
     uint64_t end = limit.value_or(start + size);
     if (bits == 32 && (start > UINT32_MAX || end > UINT64_C(0x100000000)))
@@ -94,7 +112,7 @@ ElfImage ElfImage::load(const std::string &path, const std::string &function,
       const char *data = segment->get_data();
       if (!data) throw std::runtime_error("ELF code segment has no bytes");
       const auto *first = reinterpret_cast<const unsigned char *>(data) + (start - base);
-      image.functions.push_back({name, start, end, {first, first + (end - start)}});
+      image.functions.push_back({name, start, end, {first, first + (end - start)}, inferred_section});
       loaded = true;
       break;
     }
