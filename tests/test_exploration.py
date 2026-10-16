@@ -77,6 +77,10 @@ def test_lower_bound(asmc, architecture, tmp_path):
         architecture,
     )
     options = ["--dispatch", "--unwindset", "asmc_target.0:12,linear_lower_bound.0:5"]
+    if architecture == "x86":
+        # Split the byte register bank and RAM into fields. GCC 13's dispatch
+        # model otherwise spends over 55s reducing symbolic array updates.
+        options += ["--max-field-sensitivity-array-size", "768"]
     if architecture == "rv64":
         options += ["--scalar-registers", "--max-field-sensitivity-array-size", "128"]
     check(asmc, elf, "lower_bound", "search_spec.c", tmp_path / "check", options)
