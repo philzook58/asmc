@@ -78,10 +78,21 @@ static inline struct asmc_sysv_frame asmc_sysv_setup_ram_model_at(struct asmc_st
   return frame;
 }
 static inline void asmc_sysv_check(const struct asmc_state *s, const struct asmc_sysv_frame *frame) {
-  assert(asmc_get_reg(s, ASMC_RSP, 8) == frame->stack_pointer + 8);
-  assert(asmc_get_reg(s, ASMC_DF, 1) == 0);
-  for (unsigned i = 0; i < 6; ++i)
-    assert(asmc_get_reg(s, asmc_sysv_preserved[i], 8) == frame->preserved[i]);
+  __CPROVER_assert(asmc_get_reg(s, ASMC_RSP, 8) == frame->stack_pointer + 8,
+                   "ABI violation: RSP was not restored after return");
+  __CPROVER_assert(asmc_get_reg(s, ASMC_DF, 1) == 0,
+                   "ABI violation: direction flag DF must be clear on return");
+  /* Literal register names keep counterexamples useful, including custom harnesses. */
+#define ASMC_CHECK_SAVED(reg, index) \
+  __CPROVER_assert(asmc_get_reg(s, ASMC_##reg, 8) == frame->preserved[index], \
+                   "ABI violation: callee-saved register " #reg " was not restored")
+  ASMC_CHECK_SAVED(RBX, 0);
+  ASMC_CHECK_SAVED(RBP, 1);
+  ASMC_CHECK_SAVED(R12, 2);
+  ASMC_CHECK_SAVED(R13, 3);
+  ASMC_CHECK_SAVED(R14, 4);
+  ASMC_CHECK_SAVED(R15, 5);
+#undef ASMC_CHECK_SAVED
 }
 
 /* Highest valid SysV entry SP in RAM; addresses and capacity remain explicit. */

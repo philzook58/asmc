@@ -85,7 +85,7 @@ only changes presentation; verification and result classification still use
 the complete property results.
 
 ```sh
-ctest --test-dir build -R '^asmc-objects$' --output-on-failure
+python3 -m pytest tests/test_objects.py --build-dir build -q
 ```
 
 Tests cover x86-64/RV32/RV64, `-O0` pointer spills and `-O2` calls/tail calls,

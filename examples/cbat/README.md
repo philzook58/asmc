@@ -26,14 +26,14 @@ From the ASMC directory:
 
 ```sh
 cmake --build build --target asmc-tools -j2
-ctest --test-dir build -R '^asmc-cbat$' --output-on-failure -j1
+python3 -m pytest tests/test_cbat.py --build-dir build -q
 
 # Keep the two ELF files, GOTO models, commands and full checker logs to inspect:
-python3 tests/cbat.py build/bin/asmc --arch x86 --only same_signs \
-  --output-dir build/cbat-signs
+python3 -m pytest tests/test_cbat.py --build-dir build -k 'x86 and same_signs' \
+  --basetemp build/cbat-signs -o tmp_path_retention_policy=all
 ```
 
-The output directory must be empty. For the switch edit use `--only switch`;
+The output directory must be empty. For the switch edit use `-k switch`;
 the script exits successfully when it finds the **expected** counterexample.
 Read each `cbmc.log` for the actual verification result. `commands.txt` records
 the concrete commands to reproduce each case.

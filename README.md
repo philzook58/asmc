@@ -1,10 +1,10 @@
 # ASMC - Assembly Model Checker
 
-Converts [Ghidra](https://github.com/nationalsecurityagency/ghidra) Pcode directly to [CBMC](https://github.com/diffblue/cbmc) GOTO IR.
+Converts [Ghidra](https://github.com/nationalsecurityagency/ghidra) P-Code directly to [CBMC](https://github.com/diffblue/cbmc) GOTO IR.
 
 CBMC is a powerful model checking system.
 
-PCode supports many architectures out of the box. The tool has currently been tested with x86-64, RV32, and RV64.
+P-Code supports many architectures out of the box. The tool has currently been tested with x86-64, RV32, and RV64.
 
 This is useful for both verification about standalone assembly but also assembly in relation to C code (Translation validation or linking C code to external assembly routines)
 

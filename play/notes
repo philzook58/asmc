@@ -54,6 +54,9 @@ https://github.com/fraunhoferfokus/acsl-by-example
 https://github.com/nornagon/jonesforth/blob/master/jonesforth.S
 https://github.com/u-boot/u-boot/blob/master/arch/riscv/lib/memcpy.S
 
+Parsers? Maybe my s-exp parser. parsers are a scary place to have bugs.
+
+I should test an instruction thaaat has pcode jmps/loops in it. The dumb big x86 cisc stuff?
 
 Are we fundametnally restricted by the goto binary based infrasturcture. Some things it would be nice to iteratively discover?
 What are alternatives to this architecture?

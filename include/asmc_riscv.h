@@ -46,9 +46,26 @@ static inline struct asmc_riscv_frame asmc_riscv_setup_ram_model_at(
   return frame;
 }
 static inline void asmc_riscv_check(const struct asmc_state *s, const struct asmc_riscv_frame *frame) {
-  for (unsigned i = 0; i < 15; ++i)
-    assert(asmc_riscv_reg(s, asmc_riscv_preserved[i]) == frame->preserved[i]);
-  assert(asmc_riscv_reg(s, 0) == 0);
+#define ASMC_CHECK_SAVED(reg, name, index) \
+  __CPROVER_assert(asmc_riscv_reg(s, reg) == frame->preserved[index], \
+                   "ABI violation: " name " was not restored")
+  ASMC_CHECK_SAVED(2, "stack pointer sp (x2)", 0);
+  ASMC_CHECK_SAVED(3, "register gp (x3)", 1);
+  ASMC_CHECK_SAVED(4, "register tp (x4)", 2);
+  ASMC_CHECK_SAVED(8, "callee-saved register s0 (x8)", 3);
+  ASMC_CHECK_SAVED(9, "callee-saved register s1 (x9)", 4);
+  ASMC_CHECK_SAVED(18, "callee-saved register s2 (x18)", 5);
+  ASMC_CHECK_SAVED(19, "callee-saved register s3 (x19)", 6);
+  ASMC_CHECK_SAVED(20, "callee-saved register s4 (x20)", 7);
+  ASMC_CHECK_SAVED(21, "callee-saved register s5 (x21)", 8);
+  ASMC_CHECK_SAVED(22, "callee-saved register s6 (x22)", 9);
+  ASMC_CHECK_SAVED(23, "callee-saved register s7 (x23)", 10);
+  ASMC_CHECK_SAVED(24, "callee-saved register s8 (x24)", 11);
+  ASMC_CHECK_SAVED(25, "callee-saved register s9 (x25)", 12);
+  ASMC_CHECK_SAVED(26, "callee-saved register s10 (x26)", 13);
+  ASMC_CHECK_SAVED(27, "callee-saved register s11 (x27)", 14);
+#undef ASMC_CHECK_SAVED
+  __CPROVER_assert(asmc_riscv_reg(s, 0) == 0, "ABI violation: zero register x0 must remain zero");
 }
 
 /* Choose the highest aligned entry SP in the supplied RAM region. */

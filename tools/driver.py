@@ -22,6 +22,23 @@ def positive(value):
     return number
 
 
+def is_unwinding_property(identifier):
+    return bool(re.search(r"\.unwind\.\d+$|\.recursion$", identifier))
+
+
+def checker_result(code, text):
+    """Recognize complete results conservatively; descriptions are user text."""
+    failures = re.findall(r"^\[([^\]\n]+)\] (.*): FAILURE$", text, re.MULTILINE)
+    if code == 0 and re.search(r"^VERIFICATION SUCCESSFUL$", text, re.MULTILINE) and not failures:
+        return "PASS", failures
+    if code == 6 and "out of memory" in text.lower():
+        return "MEMORY", failures
+    if code == 10 and failures and re.search(r"^VERIFICATION FAILED$", text, re.MULTILINE):
+        return ("INCOMPLETE" if all(is_unwinding_property(prop) for prop, _ in failures)
+                else "FAIL"), failures
+    return "ERROR", failures
+
+
 def print_counterexample(text, source_files, listing, full=False, first_only=False, demo=None,
                          demo_fields=None, demo_defaults=None, demo_entry="harness"):
     start = re.search(r"^Trace for .*:$", text, re.MULTILINE)
@@ -132,8 +149,12 @@ def main(version):
                         help="C assertion over inreg.REG/outreg.REG; repeatable; default harness only")
     parser.add_argument("--stack-size", type=positive,
                         help="default harness stack capacity in bytes (default: 256, minimum: 16)")
-    parser.add_argument("--reference", action="append", type=Path, default=[],
-                        help="additional C source or GOTO object; repeat for multiple files")
+    for stage, destination in (("cc", "native compiler for .s/.S input"),
+                               ("goto-cc", "both GOTO compilation stages"),
+                               ("link", "final goto-cc link, e.g. another C source or .gb file"),
+                               ("lift", "asmc-lift"), ("cbmc", "CBMC")):
+        parser.add_argument(f"--{stage}-arg", action="append", default=[], metavar="ARG",
+                            help=f"forward one argument to {destination}; repeatable; use = for flags")
     parser.add_argument("--entry", default="harness", help="C entry function (default: harness)")
     parser.add_argument("--unwind", type=positive, default=40, help="loop bound (default: 40)")
     parser.add_argument("--object-bits", type=positive, help="CBMC bits reserved for pointer object identifiers")
@@ -146,7 +167,7 @@ def main(version):
     inspection.add_argument("--show-properties", action="store_true", help="list obligations without checking")
     for option, help_text in (("trace-hex", "display trace values in hexadecimal"),
                               ("compact-trace", "display a compact counterexample"),
-                              ("beautify", "try to simplify counterexample values"),
+                              ("beautify", "try to simplify counterexample values (opt-in, as in CBMC)"),
                               ("slice-formula", "remove assignments unrelated to properties")):
         parser.add_argument("--" + option, action="store_true", help=help_text)
     solvers = parser.add_mutually_exclusive_group()
@@ -187,7 +208,7 @@ def main(version):
         parser.error("--max-field-sensitivity-array-size must be nonnegative")
     lifter = args.lifter.resolve()
     cc, cbmc = (lifter.parent / name for name in ("goto-cc", "cbmc"))
-    for path in (args.input, *([args.harness] if args.harness else []), *args.reference, lifter, cc, cbmc):
+    for path in (args.input, *([args.harness] if args.harness else []), lifter, cc, cbmc):
         if not path.is_file():
             parser.error(f"file not found: {path}; build the asmc-tools target first")
 
@@ -260,7 +281,7 @@ def main(version):
             link_flags = shlex.split(os.environ.get("LDFLAGS", ""))
             source, elf = elf, output / "target.elf"
             run("assemble", [*compiler, *flags, "-nostdlib", "-static", "-no-pie",
-                             "-Wl,-e," + args.function, source, *link_flags, "-o", elf])
+                             "-Wl,-e," + args.function, source, *link_flags, *args.cc_arg, "-o", elf])
             print(f"ELF: {elf}", flush=True)
         seed, lifted, linked = (output / name for name in ("seed.gb", "lifted.gb", "check.gb"))
         compile_options = ["-I", ROOT / "include", "-DASMC_TARGET=" + args.target]
@@ -294,6 +315,7 @@ def main(version):
         for include in args.includes:
             compile_options += ["-I", include.resolve()]
         compile_options += ["-D" + define for define in args.defines]
+        compile_options += args.goto_cc_arg
         run("seed", [cc, *compile_options, "-c", ROOT / "runtime/runtime.c", "-o", seed])
         lift_options = ["--memory", args.memory]
         if args.rodata:
@@ -309,9 +331,9 @@ def main(version):
             if value is not None:
                 lift_options += ["--" + option, value]
         run("lift", [lifter, elf, "--function", args.function,
-                     "--target", args.target, "--template", seed, "-o", lifted, *lift_options])
+                     "--target", args.target, "--template", seed, "-o", lifted, *lift_options, *args.lift_arg])
         run("link", [cc, *compile_options, lifted, harness,
-                     *(path.resolve() for path in args.reference), "-o", linked])
+                     *args.link_arg, "-o", linked])
         solver_options = []
         for name in ("z3", "cvc5", "bitwuzla"):
             if getattr(args, name):
@@ -332,34 +354,33 @@ def main(version):
         inspection = "--show-loops" if args.show_loops else "--show-properties" if args.show_properties else None
         if inspection:
             code, text = run("cbmc", [cbmc, linked, "--function", args.entry, inspection,
-                                      "--unwinding-assertions", "--validate-goto-model"])
+                                      "--unwinding-assertions", "--validate-goto-model", *args.cbmc_arg])
             print(text, end="")
             return result("INSPECT" if code == 0 else "ERROR",
                           "listing only; no verification performed" if code == 0 else
                           f"inspection exited {code}", 0 if code == 0 else 2)
         if args.memory == "objects":
             solver_options.append("--pointer-check")
-        code, text = run("cbmc", [cbmc, linked, "--function", args.entry,
-                                  "--unwind", args.unwind, *solver_options,
-                                  "--unwinding-assertions", "--validate-goto-model", "--trace"])
-        failures = re.findall(r"^\[([^\]\n]+)\] (.*): FAILURE$", text, re.MULTILINE)
-        if code == 0 and "VERIFICATION SUCCESSFUL" in text and not failures:
+        command = [cbmc, linked, "--function", args.entry, "--unwind", args.unwind, *solver_options,
+                   "--unwinding-assertions", "--validate-goto-model", "--trace", *args.cbmc_arg]
+        code, text = run("cbmc", command)
+        outcome, failures = checker_result(code, text)
+        if outcome == "PASS":
             detail = "all checked properties passed with unwinding assertions"
             if not args.harness and not args.post:
                 detail += "; safety/ABI only, no functional postcondition"
             return result("PASS", detail, 0)
-        if code == 6 and "out of memory" in text.lower():
+        if outcome == "MEMORY":
             resource_guidance(text)
             return result("INCOMPLETE", "checker exhausted memory; reduce RAM/bounds or try --z3; see cbmc.log", 11)
-        if code == 10 and failures and "VERIFICATION FAILED" in text:
+        if outcome in ("FAIL", "INCOMPLETE"):
             missing = [prop.split(".no-body.", 1)[1] for prop, _ in failures if ".no-body." in prop]
             if missing:
                 for name in missing:
                     print("Missing C definition: " + name)
-                return result("ERROR", "link missing implementations with --reference FILE.c or FILE.gb; see cbmc.log", 2)
+                return result("ERROR", "link missing implementations with --link-arg=FILE.c or --link-arg=FILE.gb; see cbmc.log", 2)
             # Classify using property IDs, not assertion descriptions supplied by users.
-            unwinds = [bool(re.search(r"\.unwind\.\d+$|\.recursion$", prop))
-                       for prop, _ in failures]
+            unwinds = [is_unwinding_property(prop) for prop, _ in failures]
             brief_objects = args.memory == "objects" and not (args.full_trace or args.compact_trace)
             shown = failures[:5] if brief_objects else failures
             for prop, description in shown:
@@ -386,7 +407,9 @@ def main(version):
                 r"\b(inreg|outreg)\s*\.\s*([A-Za-z_][A-Za-z_0-9]*)\b", "\n".join(args.pre + args.post))}
             defaults = X86_REGISTERS + X86_FLAGS if architecture == "x86" else RISCV_REGISTERS
             demo_defaults = {f"{snapshot}.{name}" for snapshot in ("inreg", "outreg") for name in defaults}
-            print_counterexample(text, [harness, *(path.resolve() for path in args.reference)],
+            sources = [Path(arg).resolve() for arg in args.link_arg + args.goto_cc_arg
+                       if Path(arg).suffix in (".c", ".C", ".cpp", ".cc") and Path(arg).is_file()]
+            print_counterexample(text, [harness, *sources],
                                  Path(str(lifted) + ".asm"), full=args.full_trace or args.compact_trace,
                                  first_only=brief_objects, demo=harness if not args.harness else None,
                                  demo_fields=demo_fields, demo_defaults=demo_defaults, demo_entry=args.entry)
@@ -406,7 +429,7 @@ def main(version):
                 detail += "; unwinding is also insufficient"
             return result("FAIL", detail, 10)
         print("\n".join(text.splitlines()[-40:]), file=sys.stderr)
-        return result("ERROR", f"unexpected checker result (exit {code}); see cbmc.log", 2)
+        return result("ERROR", f"no recognized verification result (checker exit {code}); see cbmc.log", 2)
     except subprocess.TimeoutExpired as error:
         status, code = ("INCOMPLETE", 11) if Path(error.cmd[0]) == cbmc else ("ERROR", 2)
         if code == 11:

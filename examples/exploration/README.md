@@ -46,7 +46,7 @@ gcc -O2 -nostdlib -no-pie -fcf-protection=none -fno-stack-protector \
   -o build/exploration/search.elf
 build/bin/asmc build/exploration/search.elf --function lower_bound \
   --harness examples/exploration/search_spec.c \
-  --reference examples/exploration/reference.c \
+  --link-arg examples/exploration/reference.c \
   --dispatch --unwindset asmc_target.0:12,linear_lower_bound.0:5 \
   --memory-limit 2048
 ```
@@ -65,7 +65,7 @@ For the calculator:
 gcc -nostdlib -no-pie -Wl,-e,rpn_asm examples/exploration/rpn.S \
   -o build/exploration/rpn.elf
 build/bin/asmc build/exploration/rpn.elf --function rpn_asm \
-  --harness examples/exploration/rpn_spec.c --reference examples/exploration/rpn.c \
+  --harness examples/exploration/rpn_spec.c --link-arg examples/exploration/rpn.c \
   --unwindset asmc_target.0:6,rpn.0:6 --memory-limit 2048
 ```
 
@@ -89,5 +89,5 @@ Do not call the full semantic property proved just because the C/assembly
 translation-equivalence checks pass.
 
 ```sh
-ctest --test-dir build -R '^asmc-exploration$' --output-on-failure
+python3 -m pytest tests/test_exploration.py --build-dir build -q
 ```

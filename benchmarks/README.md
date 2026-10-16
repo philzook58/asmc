@@ -103,11 +103,11 @@ kernel. Path exploration may have multiple calls, so first-stage durations do
 not measure the full job. SSA steps are recorded before formula slicing.
 Absent metrics are null, not zero.
 
-The `asmc-scaling` CTest runs only tiny semantic checks with MiniSat. It has no
+The `tests/test_scaling.py` test runs only tiny semantic checks with MiniSat. It has no
 performance pass/fail thresholds. Larger sweeps are deliberately opt-in:
 
 ```sh
-ctest --test-dir build -R '^asmc-scaling$' --output-on-failure -j1
+python3 -m pytest tests/test_scaling.py --build-dir build -q
 ```
 
 No synthetic routine is copied from an upstream project. CBMC implementation

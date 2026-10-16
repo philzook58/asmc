@@ -17,7 +17,7 @@ and disassembly, then supply **all eight case-entry addresses**:
 
 ```sh
 build/bin/asmc build/switch/switch.elf --function choose \
-  --harness examples/switch/harness.c --reference examples/switch/switch.c \
+  --harness examples/switch/harness.c --link-arg examples/switch/switch.c \
   --rodata --indirect-target ADDRESS_0 --indirect-target ADDRESS_1 \
   --indirect-target ADDRESS_2 --indirect-target ADDRESS_3 \
   --indirect-target ADDRESS_4 --indirect-target ADDRESS_5 \
@@ -25,12 +25,12 @@ build/bin/asmc build/switch/switch.elf --function choose \
   --unwind 20 --unwindset asmc_target.0:3
 ```
 
-Addresses depend on the compiler and linker. `tests/switch.py` extracts this
+Addresses depend on the compiler and linker. `tests/test_switch.py` extracts this
 fixture's table and performs the complete check automatically; it deliberately
 does not implement general jump-table recovery:
 
 ```sh
-ctest --test-dir build -R '^asmc-switch$' --output-on-failure
+python3 -m pytest tests/test_switch.py --build-dir build -q
 ```
 
 `--indirect-target` accepts an address or ELF symbol within admitted function

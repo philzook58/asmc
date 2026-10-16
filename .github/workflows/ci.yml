@@ -18,8 +18,13 @@ concurrency:
 
 jobs:
   linux:
+    name: Linux / ${{ matrix.suite }}
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [fast, slow]
     env:
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_MAXSIZE: 2G
@@ -35,15 +40,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
-            build-essential binutils clang cmake ninja-build git curl patch \
+            build-essential gcc-multilib binutils clang cmake ninja-build git curl patch \
             bison flex zlib1g-dev python3-venv ccache time \
             gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
           python3 -m venv .venv
-          .venv/bin/pip install "z3-solver==$Z3_VERSION"
+          .venv/bin/pip install -r requirements-test.txt "z3-solver==$Z3_VERSION"
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Install Kani
+      - name: Install Kani and QEMU
+        if: matrix.suite == 'slow'
         run: |
+          sudo apt-get install --no-install-recommends -y qemu-user
           cargo install --locked kani-verifier --version "$KANI_VERSION"
           cargo kani setup
           kani --version
@@ -61,15 +68,15 @@ jobs:
             ${{ runner.os }}-ccache-
 
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tee configure.log
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE="$GITHUB_WORKSPACE/.venv/bin/python" 2>&1 | tee configure.log
 
       - name: Build
         run: cmake --build build --target asmc-tools --parallel 2 2>&1 | tee build.log
 
-      # The scalar-register suite reruns other suites; keep all solver work serial.
+      # Separate runners provide a fast result; solver work stays serial per runner.
       - name: Test
         run: |
-          ctest --test-dir build -R '^asmc-' --parallel 1 \
+          ctest --test-dir build -R '^asmc-' -L '^${{ matrix.suite }}$' --parallel 1 \
             --output-on-failure --no-tests=error --output-junit "$GITHUB_WORKSPACE/build/tests.xml" 2>&1 | tee ctest.log
 
       - name: Compiler cache statistics
@@ -80,12 +87,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: linux-build-and-test-logs
+          name: linux-${{ matrix.suite }}-build-and-test-logs
           path: |
             configure.log
             build.log
             ctest.log
             build/tests.xml
             build/Testing/Temporary/
+            build/pytest-*/
+            build/pytest-*.xml
           if-no-files-found: ignore
           retention-days: 7

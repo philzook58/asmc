@@ -53,11 +53,11 @@ then expands byte-array accesses. Try `--z3` for larger buffers. The optional
 `--memory-limit` caps address space per tool/solver process in MiB; exhausted
 checker memory reports INCOMPLETE, never PASS.
 
-`tests/calls.py` checks `-O0`/`-O2` on x86-64, RV32, and RV64, tail calls,
+`tests/test_calls.py` checks `-O0`/`-O2` on x86-64, RV32, and RV64, tail calls,
 serialization validation, missing admitted helpers, insufficient bounds, and
 mutations of results, saved registers, and return addresses. The regression
 itself runs under a 2 GiB address-space cap.
 
 ```sh
-ctest --test-dir build -R '^asmc-calls$' --output-on-failure
+python3 -m pytest tests/test_calls.py --build-dir build -q
 ```

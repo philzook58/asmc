@@ -29,7 +29,7 @@ gcc -nostdlib -no-pie -Wl,-e,machine_add_one examples/compose/functions.S \
   -o build/compose/functions.elf
 build/bin/asmc build/compose/functions.elf --function machine_add_one \
   --target lifted_add_one --harness examples/compose/single.c \
-  --reference examples/compose/wrappers.c
+  --link-arg examples/compose/wrappers.c
 ```
 
 `--function` selects the machine-code symbol. `--target` selects the GOTO/C
@@ -55,7 +55,7 @@ Both entries can also come from different ELF files. Generated temporaries are
 scoped to each target name. For independent GOTO objects, compile a separate
 stub-only C template for each target using `asmc_state.h`, lift each, and link
 the resulting objects with `runtime/runtime.c` once. Do not link multiple copies
-of the common runtime. `tests/compose.py` exercises both workflows, a named
+of the common runtime. `tests/test_compose.py` exercises both workflows, a named
 driver check, wrong-result, wrong-memory-stride and unwanted-write mutations, and invalid
 target signatures.
 
@@ -66,5 +66,5 @@ Memory-writing routines can use the same pattern with explicit output copying,
 frame checks, and a documented overlap policy.
 
 ```sh
-ctest --test-dir build -R '^asmc-compose$' --output-on-failure
+python3 -m pytest tests/test_compose.py --build-dir build -q
 ```

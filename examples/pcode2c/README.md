@@ -31,7 +31,7 @@ mkdir -p build/examples
 gcc -O2 -nostdlib -no-pie -fno-stack-protector -fcf-protection=none \
   -fno-tree-vectorize -Wl,-e,mymin examples/pcode2c/min.c -o build/examples/min.elf
 build/bin/asmc build/examples/min.elf --function mymin \
-  --harness examples/pcode2c/min_spec.c --reference examples/pcode2c/min.c
+  --harness examples/pcode2c/min_spec.c --link-arg examples/pcode2c/min.c
 ```
 
 For the array example, choose enough checked iterations for lengths up to 8:
@@ -40,7 +40,7 @@ For the array example, choose enough checked iterations for lengths up to 8:
 gcc -O0 -nostdlib -no-pie -fno-stack-protector -fcf-protection=none \
   -fno-tree-vectorize -Wl,-e,equal examples/pcode2c/equal.c -o build/examples/equal.elf
 build/bin/asmc build/examples/equal.elf --function equal \
-  --harness examples/pcode2c/equal_spec.c --reference examples/pcode2c/equal.c \
+  --harness examples/pcode2c/equal_spec.c --link-arg examples/pcode2c/equal.c \
   --unwindset asmc_target.0:10,equal.0:10
 ```
 
@@ -74,5 +74,5 @@ or leave DF set. Boolean tests use dirty upper RAX bits; an invalid Boolean
 byte must fail. Too little unwinding must report INCOMPLETE.
 
 ```sh
-ctest --test-dir build -R '^asmc-pcode2c$' --output-on-failure
+python3 -m pytest tests/test_pcode2c.py --build-dir build -q
 ```

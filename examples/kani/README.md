@@ -20,9 +20,9 @@ cargo kani setup
 Run the smoke tests:
 
 ```sh
-ctest --test-dir build -R '^asmc-kani$' --output-on-failure
+python3 -m pytest tests/test_kani.py --build-dir build -q
 # Or retain logs, native ELF, lifted models, and linking commands in an empty directory:
-python3 tests/kani.py build/bin/asmc-lift build/kani-demo
+python3 -m pytest tests/test_kani.py --build-dir build --basetemp build/kani-demo -o tmp_path_retention_policy=all
 ```
 
 The CTest test skips if Kani/rustc are absent or the host is not x86-64. Kani is

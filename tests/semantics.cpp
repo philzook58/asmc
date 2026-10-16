@@ -4,6 +4,11 @@
 #include <util/namespace.h>
 #include <util/simplify_expr.h>
 #include <util/symbol_table.h>
+#include <util/std_expr.h>
+#include <util/bitvector_expr.h>
+#include <util/message.h>
+#include <solvers/flattening/boolbv.h>
+#include <solvers/sat/satcheck.h>
 #include <iostream>
 #include <stdexcept>
 
@@ -11,6 +16,66 @@ namespace {
 symbol_tablet symbols;
 namespacet ns(symbols);
 unsigned checks = 0;
+exprt translated(ghidra::OpCode opcode, unsigned bits, const std::vector<exprt> &args) {
+  return pcode_expression({opcode, Varnode{Space::unique, 0, bits/8}, {}, ""}, args);
+}
+void prove(const std::string &name, const exprt &actual, const exprt &reference,
+           bool equivalent = true) {
+  null_message_handlert messages;
+  satcheckt sat(messages);
+  boolbvt solver(ns, sat, messages);
+  solver << notequal_exprt(actual, reference);
+  const auto expected = equivalent ? decision_proceduret::resultt::D_UNSATISFIABLE :
+                                    decision_proceduret::resultt::D_SATISFIABLE;
+  if (solver() != expected)
+    throw std::runtime_error("symbolic semantics: " + name);
+  ++checks;
+}
+void symbolic_checks() {
+  using namespace ghidra;
+  for (unsigned bits : {8u, 16u, 32u, 64u}) {
+    const unsignedbv_typet type(bits), wide(2*bits), byte(8);
+    const symbol_exprt a("a", type), b("b", type), count("count", byte);
+    const auto zero = from_integer(0, type);
+    const auto sign_bit = from_integer(power(2, bits-1), type);
+    const auto negative = notequal_exprt(bitand_exprt(a, sign_bit), zero);
+    const auto widened = typecast_exprt(a, wide);
+    const auto high_mask = from_integer((power(2, bits)-1) * power(2, bits), wide);
+    prove("zext " + std::to_string(bits), translated(CPUI_INT_ZEXT, 2*bits, {a}), widened);
+    prove("sext " + std::to_string(bits), translated(CPUI_INT_SEXT, 2*bits, {a}),
+          if_exprt(negative, bitor_exprt(widened, high_mask), widened));
+    auto signed_less = typecast_exprt(less_than_exprt(bitxor_exprt(a, sign_bit),
+                                                    bitxor_exprt(b, sign_bit)), byte);
+    prove("signed comparison " + std::to_string(bits),
+          translated(CPUI_INT_SLESS, 8, {a,b}), signed_less);
+    prove("piece " + std::to_string(bits), translated(CPUI_PIECE, 2*bits, {a,b}),
+          bitor_exprt(shl_exprt(widened, from_integer(bits, byte)), typecast_exprt(b, wide)));
+    for (unsigned offset : {0u, bits/16, bits/8-1, bits/8}) {
+      exprt reference = offset == bits/8 ? exprt(from_integer(0, byte)) :
+        exprt(typecast_exprt(lshr_exprt(a, from_integer(8*offset, byte)), byte));
+      prove("subpiece " + std::to_string(bits),
+            translated(CPUI_SUBPIECE, 8, {a, from_integer(offset, byte)}), reference);
+    }
+    for (auto opcode : {CPUI_INT_LEFT, CPUI_INT_RIGHT, CPUI_INT_SRIGHT}) {
+      // Enumerate constant shifts as an independent specification of the
+      // symbolic count, including every oversized count (not an assume).
+      exprt reference = opcode == CPUI_INT_SRIGHT ?
+        exprt(if_exprt(negative, from_integer(-1, type), zero)) : exprt(zero);
+      for (unsigned n = 0; n < bits; ++n) {
+        const auto k = from_integer(n, byte);
+        exprt value = opcode == CPUI_INT_LEFT ? exprt(shl_exprt(a, k)) :
+          opcode == CPUI_INT_RIGHT ? exprt(lshr_exprt(a, k)) :
+          exprt(typecast_exprt(ashr_exprt(typecast_exprt(a, signedbv_typet(bits)), k), type));
+        reference = if_exprt(equal_exprt(count, k), value, reference);
+      }
+      prove(std::string(get_opname(opcode)) + " " + std::to_string(bits),
+            translated(opcode, bits, {a, count}), reference);
+    }
+    // Negative control: signed and unsigned comparisons must differ somewhere.
+    prove("signed comparison mutation", translated(CPUI_INT_SLESS, 8, {a,b}),
+          translated(CPUI_INT_LESS, 8, {a,b}), false);
+  }
+}
 void expect(ghidra::OpCode opcode, unsigned bits, uint64_t a, uint64_t b,
             uint64_t expected, unsigned result_bits = 0) {
   if (!result_bits) result_bits = bits;
@@ -31,6 +96,7 @@ void expect(ghidra::OpCode opcode, unsigned bits, uint64_t a, uint64_t b,
 int main() {
   try {
     using namespace ghidra;
+    symbolic_checks();
     // Widened host arithmetic makes these overflow expectations independent
     // of the translator's sign-bit rules. Exhaust every 8-bit operand pair.
     for (unsigned a = 0; a < 256; ++a)

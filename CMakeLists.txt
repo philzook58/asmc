@@ -35,66 +35,33 @@ configure_file(tools/asmc.in "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc" @ONLY
 add_custom_target(asmc ALL DEPENDS asmc-lift cbmc goto-cc "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 add_custom_target(asmc-tools DEPENDS asmc goto-instrument)
 add_executable(asmc-semantics tests/semantics.cpp)
-target_link_libraries(asmc-semantics PRIVATE asmc-core)
+target_link_libraries(asmc-semantics PRIVATE asmc-core solvers)
 add_dependencies(asmc-tools asmc-semantics)
 
 enable_testing()
 add_test(NAME asmc-semantics COMMAND asmc-semantics)
-add_test(NAME asmc-challenges COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/run.py $<TARGET_FILE:asmc-lift>
-  --tools $<TARGET_FILE_DIR:cbmc>)
-set_tests_properties(asmc-challenges PROPERTIES TIMEOUT 600)
-add_test(NAME asmc-check COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/check.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-check PROPERTIES TIMEOUT 180)
-add_test(NAME asmc-source COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/source.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-source PROPERTIES TIMEOUT 180)
-add_test(NAME asmc-demo COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/demo.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-demo PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-tutorial COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/tutorial.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-tutorial PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-kani COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/kani.py "$<TARGET_FILE:asmc-lift>")
-set_tests_properties(asmc-kani PROPERTIES TIMEOUT 300 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
-add_test(NAME asmc-scaling COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/scaling.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-scaling PROPERTIES TIMEOUT 180)
-add_test(NAME asmc-pcode2c COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/pcode2c.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-pcode2c PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-kernels COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/kernels.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-kernels PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-compose COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/compose.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-compose PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-cbat COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/cbat.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-cbat PROPERTIES TIMEOUT 900)
-add_test(NAME asmc-calls COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/calls.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-calls PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-exploration COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/exploration.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-exploration PROPERTIES TIMEOUT 600)
-find_program(ASMC_RISCV_GCC riscv64-unknown-elf-gcc)
-if(ASMC_RISCV_GCC)
-  add_test(NAME asmc-riscv COMMAND ${Python3_EXECUTABLE}
-    ${CMAKE_CURRENT_SOURCE_DIR}/tests/riscv.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-  set_tests_properties(asmc-riscv PROPERTIES TIMEOUT 600)
-endif()
-add_test(NAME asmc-native COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/native.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-native PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-switch COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/switch.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-switch PROPERTIES TIMEOUT 300)
-add_test(NAME asmc-objects COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/objects.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-objects PROPERTIES TIMEOUT 600)
-add_test(NAME asmc-scalar-registers COMMAND ${Python3_EXECUTABLE}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tests/scalar.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
-set_tests_properties(asmc-scalar-registers PROPERTIES TIMEOUT 1800 RUN_SERIAL TRUE)
+set_tests_properties(asmc-semantics PROPERTIES LABELS fast)
+
+# Pytest owns case discovery and fast/slow markers; CTest remains the build entry point.
+foreach(suite fast slow)
+  add_test(NAME asmc-${suite} COMMAND ${Python3_EXECUTABLE} -m pytest -q
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests -m ${suite}
+    --build-dir ${CMAKE_CURRENT_BINARY_DIR}
+    --basetemp ${CMAKE_CURRENT_BINARY_DIR}/pytest-${suite}
+    --junitxml ${CMAKE_CURRENT_BINARY_DIR}/pytest-${suite}.xml)
+  set_tests_properties(asmc-${suite} PROPERTIES LABELS ${suite})
+endforeach()
+set_tests_properties(asmc-fast PROPERTIES TIMEOUT 300)
+set_tests_properties(asmc-slow PROPERTIES TIMEOUT 2400)
+
+# Repeat the same semantic/oracle cases under the alternative register encoding.
+set(scalar_suites challenges demo calls objects native riscv_native switch riscv compose cbat scalar)
+set(scalar_tests)
+foreach(suite IN LISTS scalar_suites)
+  list(APPEND scalar_tests ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_${suite}.py)
+endforeach()
+add_test(NAME asmc-scalar-registers COMMAND ${Python3_EXECUTABLE} -m pytest -q
+  ${scalar_tests} --scalar-registers --build-dir ${CMAKE_CURRENT_BINARY_DIR}
+  --basetemp ${CMAKE_CURRENT_BINARY_DIR}/pytest-scalar
+  --junitxml ${CMAKE_CURRENT_BINARY_DIR}/pytest-scalar.xml)
+set_tests_properties(asmc-scalar-registers PROPERTIES LABELS slow TIMEOUT 1800 RUN_SERIAL TRUE)

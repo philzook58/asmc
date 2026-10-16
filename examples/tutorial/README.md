@@ -12,9 +12,9 @@ third-party implementation was added.
 Run all cases, including expected failures:
 
 ```sh
-ctest --test-dir build -R '^asmc-tutorial$' --output-on-failure
+python3 -m pytest tests/test_tutorial.py --build-dir build -q
 # Without reconfiguring CMake:
-python3 tests/tutorial.py build/bin/asmc
+python3 -m pytest tests/test_tutorial.py --build-dir build
 ```
 
 | Example | Positive check | Negative check |

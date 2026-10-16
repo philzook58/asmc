@@ -25,7 +25,7 @@ Those are algorithm references; no further implementation was imported.
 The goto-fail example is CBAT's teaching model with toy crypto stubs, not an
 implementation of TLS verification.
 
-`abi.h`, `entries.c`, `harness.c`, `record_calls.h`, and `tests/cbat.py` are
+`abi.h`, `entries.c`, `harness.c`, `record_calls.h`, and `tests/test_cbat.py` are
 independently written ASMC teaching/test support. Deliberately broken/fixed
 variants are generated in the test output directory; original fixtures remain
 unchanged.

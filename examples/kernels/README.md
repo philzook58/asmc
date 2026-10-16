@@ -30,7 +30,7 @@ mkdir -p build/examples
 gcc -nostdlib -no-pie -Wl,-e,count_bits_fast examples/kernels/optimized.S \
   -o build/examples/optimized.elf
 build/bin/asmc build/examples/optimized.elf --function count_bits_fast \
-  --harness examples/kernels/scalar_spec.c --reference examples/kernels/kernels.c \
+  --harness examples/kernels/scalar_spec.c --link-arg examples/kernels/kernels.c \
   --unwind 66 --slice-formula
 ```
 
@@ -45,7 +45,7 @@ gcc -O2 -nostdlib -no-pie -fno-stack-protector -fcf-protection=none \
   -fno-tree-vectorize -Wl,-e,sum_words examples/kernels/kernels.c \
   -o build/examples/kernels.elf
 build/bin/asmc build/examples/kernels.elf --function sum_words \
-  --harness examples/kernels/memory_spec.c --reference examples/kernels/kernels.c \
+  --harness examples/kernels/memory_spec.c --link-arg examples/kernels/kernels.c \
   --show-loops
 ```
 
@@ -54,7 +54,7 @@ bounds, then remove `--show-loops` and add
 `--unwindset asmc_target.0:6,sum_words.0:6`. For swap, use
 `--function swap_words -DSWAP` without that unwindset.
 
-`tests/kernels.py` checks GCC and Clang at `-O2`, both assembly alternatives,
+`tests/test_kernels.py` checks GCC and Clang at `-O2`, both assembly alternatives,
 and mutations that miss the top bit, invert selection, replace addition with
 XOR, or fail to write one swapped value. Good targets pass; each mutation fails.
 
@@ -66,5 +66,5 @@ unwinding separately. These are bounded whole-function checks; they do not
 reproduce the post's unbounded cutpoint proof.
 
 ```sh
-ctest --test-dir build -R '^asmc-(check|kernels)$' --output-on-failure
+python3 -m pytest tests/test_driver.py tests/test_kernels.py --build-dir build -q
 ```

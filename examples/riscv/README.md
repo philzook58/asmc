@@ -20,7 +20,7 @@ define to `64`. The harness define is supplied automatically from ELF.
 The default harness checks stack restoration and scalar ABI preservation as well
 as the supplied property. Entry/exit register snapshots use XLEN-bit unsigned
 fields. Use `--pre` for C assumptions or `--harness examples/riscv/spec.c
---reference examples/riscv/functions.c -DCASE=1` for the explicit C reference check.
+--link-arg examples/riscv/functions.c -DCASE=1` for the explicit C reference check.
 The Linux cross-compiler can also build statically linked leaf routines.
 No libc, globals, calls, or relocation processing is needed for these examples.
 
@@ -76,11 +76,11 @@ faults, interrupts and hardware timing are not modeled. Helpers cover values
 up to XLEN in the first eight argument registers; RV32 64-bit register pairs,
 stack arguments and aggregate signatures require an explicit harness.
 
-`tests/riscv.py` checks both widths, three compiler configurations, serialization
+`tests/test_riscv.py` checks both widths, three compiler configurations, serialization
 round-trips, all eight arguments, zero-register writes, signed loads, RV64
 `addiw`, ABI mutations, RV32 memory wrapping, unsupported instructions and
 insufficient unwinding. It requires `riscv64-unknown-elf-gcc` and Z3.
 
 ```sh
-ctest --test-dir build -R '^asmc-riscv$' --output-on-failure
+python3 -m pytest tests/test_riscv.py --build-dir build -q
 ```
