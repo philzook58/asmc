@@ -7,7 +7,7 @@ int64_t mymin(int64_t x, int64_t y);
 void harness(void) {
   uint8_t ram[256];
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter(&s, ram, 0x1000, sizeof(ram), 0x10c8);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10c8);
   /* The complete signed 64-bit domain, including INT64_MIN and INT64_MAX. */
   int64_t x = nondet_i64(), y = nondet_i64();
   asmc_sysv_arg64(&s, 0, (uint64_t)x);

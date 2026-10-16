@@ -1,7 +1,7 @@
 /* Private aliases let this harness exercise the three supported ABIs. */
 #ifdef ASMC_RISCV_XLEN
 #include "asmc_riscv.h"
-#define enter_objects asmc_riscv_enter_objects
+#define enter_objects asmc_riscv_setup_objects_model
 #define arg_ptr asmc_riscv_arg_ptr
 #define arg_value asmc_riscv_arg
 #define result_value asmc_riscv_result
@@ -10,7 +10,7 @@
 typedef struct asmc_riscv_frame frame_t;
 #else
 #include "asmc_x86.h"
-#define enter_objects asmc_sysv_enter_objects
+#define enter_objects asmc_sysv_setup_objects_model
 #define arg_ptr asmc_sysv_arg_ptr
 #define arg_value asmc_sysv_arg64
 #define result_value asmc_sysv_result64

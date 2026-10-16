@@ -6,7 +6,7 @@ uint64_t choose(unsigned, uint64_t);
 void harness(void) {
   uint8_t ram[128];
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter_at_end(&s, ram, 0x1000, sizeof ram);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model(&s, ram, 0x1000, sizeof ram);
   unsigned tag = nondet_unsigned();
   uint64_t x = nondet_u64();
   asmc_sysv_arg32(&s, 0, tag);

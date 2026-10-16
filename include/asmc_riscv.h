@@ -30,7 +30,7 @@ static inline uint64_t asmc_riscv_result(const struct asmc_state *s) {
 }
 static const unsigned asmc_riscv_preserved[] = {2,3,4,8,9,18,19,20,21,22,23,24,25,26,27};
 struct asmc_riscv_frame { uint64_t preserved[15]; };
-static inline struct asmc_riscv_frame asmc_riscv_enter(
+static inline struct asmc_riscv_frame asmc_riscv_setup_ram_model_at(
     struct asmc_state *s, uint8_t *ram, uint64_t base, uint64_t size, uint64_t sp) {
   uint64_t maximum = ASMC_RISCV_XLEN == 32 ? UINT32_MAX : UINT64_MAX;
   assert(base <= maximum && size <= maximum - base);
@@ -51,6 +51,22 @@ static inline void asmc_riscv_check(const struct asmc_state *s, const struct asm
   assert(asmc_riscv_reg(s, 0) == 0);
 }
 
+/* Choose the highest aligned entry SP in the supplied RAM region. */
+static inline struct asmc_riscv_frame asmc_riscv_setup_ram_model(
+    struct asmc_state *s, uint8_t *ram, uint64_t base, uint64_t size) {
+  uint64_t maximum = ASMC_RISCV_XLEN == 32 ? UINT32_MAX : UINT64_MAX;
+  assert(size >= 16 && base <= maximum && size <= maximum - base);
+  return asmc_riscv_setup_ram_model_at(s, ram, base, size, (base + size) & ~UINT64_C(15));
+}
+
+/* Set arguments first. Setup preserves argument registers and RAM contents. */
+static inline void asmc_riscv_call_ram_model(
+    struct asmc_state *s, uint8_t *ram, uint64_t base, uint64_t size) {
+  struct asmc_riscv_frame saved_abi = asmc_riscv_setup_ram_model(s, ram, base, size);
+  ASMC_TARGET(s);
+  asmc_riscv_check(s, &saved_abi);
+}
+
 #ifdef ASMC_OBJECT_MEMORY
 static inline void asmc_riscv_arg_ptr(struct asmc_state *s, unsigned index, const void *p) {
   asmc_riscv_arg(s, index, (uintptr_t)p);
@@ -61,12 +77,18 @@ static inline void *asmc_riscv_result_ptr(const struct asmc_state *s) {
   uintptr_t address = (uintptr_t)asmc_riscv_result(s);
   return (void *)address;
 }
-static inline struct asmc_riscv_frame asmc_riscv_enter_objects(
+static inline struct asmc_riscv_frame asmc_riscv_setup_objects_model(
     struct asmc_state *s, uint8_t *stack, uint64_t size) {
   assert(__CPROVER_w_ok(stack, size));
-  assert(size >= 16);
-  uint64_t base = (uintptr_t)stack;
-  return asmc_riscv_enter(s, stack, base, size, (base + size) & ~UINT64_C(15));
+  return asmc_riscv_setup_ram_model(s, stack, (uintptr_t)stack, size);
 }
+/* Setup, execute, and assert scalar ABI obligations using a C stack object. */
+static inline void asmc_riscv_call_objects_model(
+    struct asmc_state *s, uint8_t *stack, uint64_t size) {
+  struct asmc_riscv_frame saved_abi = asmc_riscv_setup_objects_model(s, stack, size);
+  ASMC_TARGET(s);
+  asmc_riscv_check(s, &saved_abi);
+}
+
 #endif
 #endif

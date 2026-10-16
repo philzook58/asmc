@@ -8,7 +8,7 @@ uint64_t choose(uint64_t, uint64_t, uint64_t);
 void harness(void) {
   uint8_t ram[256];
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter(&s, ram, 0x1000, sizeof(ram), 0x10c8);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10c8);
   uint64_t x = nondet_u64(), y = nondet_u64(), condition = nondet_u64();
   asmc_sysv_arg64(&s, 0, x);
   asmc_sysv_arg64(&s, 1, y);

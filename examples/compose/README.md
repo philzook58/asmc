@@ -16,7 +16,7 @@ There is no automatic pointer conversion or implicit aliasing policy.
 The wrapper's numeric RAM layout is part of the model; vary it explicitly when
 address dependence is relevant to the property being checked.
 
-The stack helper `asmc_sysv_enter_at_end` chooses the highest valid entry SP
+The stack helper `asmc_sysv_setup_ram_model` chooses the highest valid entry SP
 inside RAM, leaving stack space below it. Here the first 128 bytes are
 application RAM and the upper half is stack. The numeric base and RAM capacity
 remain explicit. A larger stack frame needs a larger buffer or another layout.

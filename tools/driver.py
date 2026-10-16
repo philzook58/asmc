@@ -45,9 +45,15 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
     recent = deque(maxlen=6)
     fields = demo_defaults
     post_trace = False
+    temporaries = {}
     # Keep CBMC's state/value format, omitting helper and p-code temporaries.
     # Always retain violated properties, including failures inside the machine model.
     for block in re.split(r"\n\s*\n", trace):
+        if block.startswith("State "):
+            assignment = re.search(r"^  (asmc_tmp_\d+)=(0x[0-9a-fA-F]+|[0-9]+)[uUlL]*\s", block, re.MULTILINE)
+            if assignment:
+                value = assignment[2]
+                temporaries[assignment[1]] = int(value, 16 if value.startswith("0x") else 10)
         if block.startswith("Violated property:"):
             if recent:
                 print("  Recent machine instructions:")
@@ -62,7 +68,18 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
             elif len(lines) == 4 and lines[2].strip().removeprefix("assertion ") == lines[3].strip():
                 lines = lines[:3]
             print("\n".join(lines) + "\n")
+            if "unexpected return address" in block:
+                operands = re.search(r"\b(asmc_tmp_\d+) == (asmc_tmp_\d+)\b", block)
+                if operands and all(name in temporaries for name in operands.groups()):
+                    actual, expected = (temporaries[name] for name in operands.groups())
+                    print(f"  Return destination: {actual:#x} ({actual})")
+                    print(f"  Expected harness return sentinel: {expected:#x}")
+                    if "||" in block:
+                        print("  Admitted call continuation addresses are also allowed (see assertion above).")
+                print()
+
         elif block.startswith("Trace for "):
+            temporaries.clear()
             recent.clear()
             post_trace = bool(demo and block.startswith(f"Trace for {demo_entry}.assertion."))
             fields = demo_fields if post_trace and demo_fields else demo_defaults
@@ -82,7 +99,7 @@ def print_counterexample(text, source_files, listing, full=False, first_only=Fal
                     continue
                 location = re.search(r"file (.*?) function .* line (\d+) thread", lines[0])
                 if location:
-                    if demo and Path(location[1]) == demo and not value.startswith(("in.", "out.")):
+                    if demo and Path(location[1]) == demo and not value.startswith(("inreg.", "outreg.")):
                         continue
                     if demo and Path(location[1]) == demo and fields is not None and value.split("=", 1)[0] not in fields:
                         continue
@@ -94,7 +111,7 @@ def main(version):
         prog="asmc",
         description="Check an ELF or GNU assembly function against a C harness.",
         epilog="Example: asmc examples/inc.S --function inc "
-               "--post 'out.rax == in.rdi + 1'")
+               "--post 'outreg.rax == inreg.rdi + 1'")
     parser.add_argument("--version", action="version", version="ASMC " + version)
     parser.add_argument("input", type=Path, help="linked ELF or .s/.S source (assembled with CC, default: cc)")
     parser.add_argument("--function", required=True, help="ELF symbol to lift")
@@ -110,9 +127,9 @@ def main(version):
                         help="experimental: use scalarizable register words, preserving byte aliases")
     parser.add_argument("--harness", type=Path, help="C harness (default: generate a stack/ABI harness)")
     parser.add_argument("--pre", action="append", default=[],
-                        help="C assumption over entry registers in.REG; repeatable; default harness only")
+                        help="C assumption over entry registers inreg.REG; repeatable; default harness only")
     parser.add_argument("--post", action="append", default=[],
-                        help="C assertion over in.REG/out.REG; repeatable; default harness only")
+                        help="C assertion over inreg.REG/outreg.REG; repeatable; default harness only")
     parser.add_argument("--stack-size", type=positive,
                         help="default harness stack capacity in bytes (default: 256, minimum: 16)")
     parser.add_argument("--reference", action="append", type=Path, default=[],
@@ -362,13 +379,13 @@ def main(version):
                     "__CPROVER_w_ok" in description for _, description in failures):
                 print("Object mode requires encoded C pointers: check allocation lifetime, complete access bounds, "
                       "and pointer truncation. Fixed ELF data addresses are not mapped in this mode.")
-                print("For setup, use the ABI's *_enter_objects stack helper and *_arg_ptr pointer arguments.")
+                print("For setup, use the ABI's *_setup_objects_model stack helper and *_arg_ptr pointer arguments.")
             # This is a display filter only: every view remains in the generated
             # harness and raw trace. No expressions or solver inputs are changed.
             demo_fields = {f"{snapshot}.{name}" for snapshot, name in re.findall(
-                r"\b(in|out)\s*\.\s*([A-Za-z_][A-Za-z_0-9]*)\b", "\n".join(args.pre + args.post))}
+                r"\b(inreg|outreg)\s*\.\s*([A-Za-z_][A-Za-z_0-9]*)\b", "\n".join(args.pre + args.post))}
             defaults = X86_REGISTERS + X86_FLAGS if architecture == "x86" else RISCV_REGISTERS
-            demo_defaults = {f"{snapshot}.{name}" for snapshot in ("in", "out") for name in defaults}
+            demo_defaults = {f"{snapshot}.{name}" for snapshot in ("inreg", "outreg") for name in defaults}
             print_counterexample(text, [harness, *(path.resolve() for path in args.reference)],
                                  Path(str(lifted) + ".asm"), full=args.full_trace or args.compact_trace,
                                  first_only=brief_objects, demo=harness if not args.harness else None,

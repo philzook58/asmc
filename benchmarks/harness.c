@@ -6,9 +6,9 @@ void harness(void) {
   uint8_t ram[BENCH_RAM];
   struct asmc_state s;
 #ifdef ASMC_OBJECT_MEMORY
-  struct asmc_sysv_frame frame = asmc_sysv_enter_objects(&s, ram, sizeof(ram));
+  struct asmc_sysv_frame frame = asmc_sysv_setup_objects_model(&s, ram, sizeof(ram));
 #else
-  struct asmc_sysv_frame frame = asmc_sysv_enter_at_end(&s, ram, 0x1000, sizeof(ram));
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model(&s, ram, 0x1000, sizeof(ram));
 #endif
   uint64_t x, y;
   asmc_sysv_arg64(&s, 0, x);

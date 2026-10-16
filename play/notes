@@ -85,3 +85,5 @@ pcode output. Some things depend on the current machine state in a way that the 
 You could look at the sail-graham project for more stuff like this.
 How feasible would it be to use sail or isla output in addition to or instead of pcode?
 Pcode does make it easy being a prepackaged C++ project.
+
+I've noticed especially in arm that there can be little bits of read only data in amongst the code. Is this supported?

@@ -10,7 +10,7 @@ void swap_words(uint32_t *, uint32_t *);
 void harness(void) {
   uint8_t ram[256];
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter(&s, ram, 0x1000, sizeof(ram), 0x10c8);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10c8);
   uint32_t data[4];
   for (unsigned i = 0; i < 4; ++i) {
     data[i] = nondet_u32();

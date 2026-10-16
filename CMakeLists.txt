@@ -53,6 +53,12 @@ set_tests_properties(asmc-source PROPERTIES TIMEOUT 180)
 add_test(NAME asmc-demo COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tests/demo.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 set_tests_properties(asmc-demo PROPERTIES TIMEOUT 300)
+add_test(NAME asmc-tutorial COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/tutorial.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
+set_tests_properties(asmc-tutorial PROPERTIES TIMEOUT 300)
+add_test(NAME asmc-kani COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/tests/kani.py "$<TARGET_FILE:asmc-lift>")
+set_tests_properties(asmc-kani PROPERTIES TIMEOUT 300 SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
 add_test(NAME asmc-scaling COMMAND ${Python3_EXECUTABLE}
   ${CMAKE_CURRENT_SOURCE_DIR}/tests/scaling.py "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/asmc")
 set_tests_properties(asmc-scaling PROPERTIES TIMEOUT 180)

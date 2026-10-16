@@ -32,7 +32,7 @@ answer:
     # Make the native compiler configuration deterministic for these tests.
     env = dict(os.environ, CC="cc", CPPFLAGS="", CFLAGS="", LDFLAGS="")
 
-    def check(name, property="out.rax == 42", expected=0, options=(), environment=env):
+    def check(name, property="outreg.rax == 42", expected=0, options=(), environment=env):
         output = tmp / name
         text = run([asmc, source, "--function", "answer", "--post", property,
                     "-o", output, *options], expected, environment)
@@ -42,10 +42,10 @@ answer:
     text, output = check("source")
     assert "ELF: " + str(output / "target.elf") in text
     assert (output / "assemble.log").is_file() and (output / "target.elf").is_file()
-    text, output = check("wrong", "out.rax == 43", 10)
+    text, output = check("wrong", "outreg.rax == 43", 10)
     recent = text.split("Recent machine instructions:\n", 1)[1].split("Violated property:", 1)[0]
     assert recent.count("MOV RAX,0x2a") == 1 and recent.count("RET") == 1, recent
-    assert "out.rax=42" in text and "FAIL:" in text
+    assert "outreg.rax=42" in text and "FAIL:" in text
     check("scalar", options=["--scalar-registers"])
     print("PASS source input, counterexample, scalar layout and trace locations", flush=True)
 
@@ -84,7 +84,7 @@ answer:
                       '.section .note.GNU-stack,"",@progbits\n')
     text, output = check("missing_size")
     assert "ASMC lift range:" in text and ".text" in text
-    check("unsized_wrong", "out.rax == 43", 10)
+    check("unsized_wrong", "outreg.rax == 43", 10)
     symbols = run(["nm", "-n", output / "target.elf"])
     end = next(line.split()[0] for line in symbols.splitlines() if line.endswith(" answer_end"))
     check("end", options=["--lift-end-address", "0x" + end])
@@ -127,9 +127,9 @@ answer:
                               'li a0,42\nret\n.size answer,.-answer\n')
             riscv = dict(env, CC="riscv64-unknown-elf-gcc",
                          CFLAGS=f"-march=rv{bits}imc -mabi=" + ("ilp32" if bits == 32 else "lp64"))
-            check("rv" + str(bits), "out.a0 == 42", environment=riscv)
+            check("rv" + str(bits), "outreg.a0 == 42", environment=riscv)
             source.write_text(source.read_text().replace('.type answer,@function\n', '')
                               .replace('.size answer,.-answer\n', ''))
-            text, _ = check("rv" + str(bits) + "-unsized", "out.a0 == 42", environment=riscv)
+            text, _ = check("rv" + str(bits) + "-unsized", "outreg.a0 == 42", environment=riscv)
             assert "ASMC lift range:" in text
         print("PASS RV32/RV64 assembly input through CC", flush=True)

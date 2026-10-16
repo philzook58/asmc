@@ -61,7 +61,7 @@ static inline void asmc_assume_flags(const struct asmc_state *s) {
 static const unsigned asmc_sysv_preserved[] = {
   ASMC_RBX, ASMC_RBP, ASMC_R12, ASMC_R13, ASMC_R14, ASMC_R15
 };
-static inline struct asmc_sysv_frame asmc_sysv_enter(struct asmc_state *s, uint8_t *ram,
+static inline struct asmc_sysv_frame asmc_sysv_setup_ram_model_at(struct asmc_state *s, uint8_t *ram,
                                      uint64_t base, uint64_t size, uint64_t sp) {
   /* Other registers and RAM retain their initial values. */
   assert((sp & 15) == 8); /* Stack alignment at function entry, after CALL. */
@@ -85,12 +85,20 @@ static inline void asmc_sysv_check(const struct asmc_state *s, const struct asmc
 }
 
 /* Highest valid SysV entry SP in RAM; addresses and capacity remain explicit. */
-static inline struct asmc_sysv_frame asmc_sysv_enter_at_end(
+static inline struct asmc_sysv_frame asmc_sysv_setup_ram_model(
     struct asmc_state *s, uint8_t *ram, uint64_t base, uint64_t size) {
   assert(size >= 16 && size <= UINT64_MAX - base);
   uint64_t sp = ((base + size - 16) & ~UINT64_C(15)) + 8;
   assert(sp >= base);
-  return asmc_sysv_enter(s, ram, base, size, sp);
+  return asmc_sysv_setup_ram_model_at(s, ram, base, size, sp);
+}
+
+/* Set arguments first. Setup preserves them and writes the stack return sentinel. */
+static inline void asmc_sysv_call_ram_model(
+    struct asmc_state *s, uint8_t *ram, uint64_t base, uint64_t size) {
+  struct asmc_sysv_frame saved_abi = asmc_sysv_setup_ram_model(s, ram, base, size);
+  ASMC_TARGET(s);
+  asmc_sysv_check(s, &saved_abi);
 }
 
 #ifdef ASMC_OBJECT_MEMORY
@@ -101,10 +109,18 @@ static inline void asmc_sysv_arg_ptr(struct asmc_state *s, unsigned index, const
 static inline void *asmc_sysv_result_ptr(const struct asmc_state *s) {
   return (void *)(uintptr_t)asmc_sysv_result64(s);
 }
-static inline struct asmc_sysv_frame asmc_sysv_enter_objects(
+static inline struct asmc_sysv_frame asmc_sysv_setup_objects_model(
     struct asmc_state *s, uint8_t *stack, uint64_t size) {
   assert(__CPROVER_w_ok(stack, size));
-  return asmc_sysv_enter_at_end(s, stack, (uintptr_t)stack, size);
+  return asmc_sysv_setup_ram_model(s, stack, (uintptr_t)stack, size);
 }
+/* Setup, execute, and assert scalar ABI obligations using a C stack object. */
+static inline void asmc_sysv_call_objects_model(
+    struct asmc_state *s, uint8_t *stack, uint64_t size) {
+  struct asmc_sysv_frame saved_abi = asmc_sysv_setup_objects_model(s, stack, size);
+  ASMC_TARGET(s);
+  asmc_sysv_check(s, &saved_abi);
+}
+
 #endif
 #endif

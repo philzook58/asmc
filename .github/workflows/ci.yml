@@ -1,0 +1,91 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
+      CCACHE_MAXSIZE: 2G
+      CCACHE_COMPRESS: 'true'
+      KANI_VERSION: 0.68.0
+      Z3_VERSION: 5.1.0.0
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install build and test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            build-essential binutils clang cmake ninja-build git curl patch \
+            bison flex zlib1g-dev python3-venv ccache time \
+            gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+          python3 -m venv .venv
+          .venv/bin/pip install "z3-solver==$Z3_VERSION"
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install Kani
+        run: |
+          cargo install --locked kani-verifier --version "$KANI_VERSION"
+          cargo kani setup
+          kani --version
+          rustc --version
+          z3 --version
+          riscv64-unknown-elf-gcc --version
+
+      - name: Restore compiler cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ${{ runner.os }}-ccache-${{ hashFiles('CMakeLists.txt') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-${{ hashFiles('CMakeLists.txt') }}-
+            ${{ runner.os }}-ccache-
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release 2>&1 | tee configure.log
+
+      - name: Build
+        run: cmake --build build --target asmc-tools --parallel 2 2>&1 | tee build.log
+
+      # The scalar-register suite reruns other suites; keep all solver work serial.
+      - name: Test
+        run: |
+          ctest --test-dir build -R '^asmc-' --parallel 1 \
+            --output-on-failure --no-tests=error --output-junit "$GITHUB_WORKSPACE/build/tests.xml" 2>&1 | tee ctest.log
+
+      - name: Compiler cache statistics
+        if: always()
+        run: ccache --show-stats
+
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: linux-build-and-test-logs
+          path: |
+            configure.log
+            build.log
+            ctest.log
+            build/tests.xml
+            build/Testing/Temporary/
+          if-no-files-found: ignore
+          retention-days: 7

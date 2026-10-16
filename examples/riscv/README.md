@@ -12,7 +12,7 @@ riscv64-unknown-elf-gcc -march=rv32imc -mabi=ilp32 -O2 \
   -DASMC_RISCV_XLEN=32 -nostdlib -static -fno-builtin \
   -Wl,--no-relax,-e,inc examples/riscv/functions.c -o build/examples/rv32.elf
 build/bin/asmc build/examples/rv32.elf --function inc \
-  --post 'out.a0 == in.a0 + 1'
+  --post 'outreg.a0 == inreg.a0 + 1'
 ```
 
 For RV64, change `rv32imc` to `rv64imc`, `ilp32` to `lp64`, and the compiler
@@ -40,7 +40,7 @@ Include `asmc_riscv.h` for explicit integer-register helpers:
 
 ```c
 struct asmc_riscv_frame frame =
-  asmc_riscv_enter(&s, ram, 0x1000, sizeof(ram), 0x10f0);
+  asmc_riscv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10f0);
 asmc_riscv_arg(&s, 0, value); /* a0: one XLEN-bit value or numeric address */
 asmc_target(&s);
 assert(asmc_riscv_result(&s) == expected);

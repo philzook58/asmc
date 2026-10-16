@@ -14,10 +14,10 @@ void harness(void) {
   __CPROVER_assume(x <= 3);
 #endif
 #ifdef ASMC_RISCV_XLEN
-  struct asmc_riscv_frame frame = asmc_riscv_enter(&s, ram, 0x1000, sizeof(ram), 0x1090);
+  struct asmc_riscv_frame frame = asmc_riscv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x1090);
   asmc_riscv_arg32(&s, 0, x);
 #else
-  struct asmc_sysv_frame frame = asmc_sysv_enter_at_end(&s, ram, 0x1000, sizeof(ram));
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model(&s, ram, 0x1000, sizeof(ram));
   asmc_sysv_arg32(&s, 0, x);
 #endif
   asmc_target(&s);

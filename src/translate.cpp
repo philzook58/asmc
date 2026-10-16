@@ -360,10 +360,14 @@ public:
               dispatch_jumps.push_back(function.body.add(goto_programt::make_incomplete_goto(location)));
             } else if (op.opcode == CPUI_RETURN) {
               auto destination = snapshot(typecast_exprt(read(op.inputs.at(0), pc), address_type));
-              exprt permitted = equal_exprt(destination, field("return_address"));
+              // Keep both operands visible as scalar values in counterexample traces.
+              auto expected = snapshot(field("return_address"));
+              exprt permitted = equal_exprt(destination, expected);
               for (auto address : call_returns)
                 permitted = or_exprt(permitted, equal_exprt(destination, number(address)));
-              check(permitted, "unexpected return address");
+              check(permitted, image.riscv
+                    ? "unexpected return address (possible clobbered RA register or incorrect stack restore)"
+                    : "unexpected return address (possible clobbered stack return address or incorrect RSP)");
               auto exits = program_counter ? equal_exprt(destination, field("return_address")) : exprt(true_exprt());
               returns.push_back(function.body.add(goto_programt::make_incomplete_goto(exits, location)));
               if (program_counter) {

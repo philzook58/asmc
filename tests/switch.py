@@ -76,7 +76,7 @@ def main():
 void harness(void) {
   uint8_t ram[128] = {0};
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter_at_end(&s, ram, 0x1000, sizeof ram);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model(&s, ram, 0x1000, sizeof ram);
   asmc_sysv_arg64(&s, 0, ''' + str(address) + '''ULL);
   asmc_target(&s);
   assert(asmc_sysv_result64(&s) == ''' + str(value) + '''ULL);

@@ -53,8 +53,12 @@ def main():
             check(elf, "saturating_add", "scalar_spec.c", "sat-" + arch)
             source = EXAMPLE / "acsl-by-example/lower_bound.c"
             elf = compile(source, "lower_bound", "search-" + arch, arch)
-            check(elf, "lower_bound", "search_spec.c", "search-" + arch,
-                  ["--dispatch", "--unwindset", "asmc_target.0:12,linear_lower_bound.0:5"])
+            options = ["--dispatch", "--unwindset", "asmc_target.0:12,linear_lower_bound.0:5"]
+            # Scalarize the RV64 register bank and 128-byte RAM to avoid a
+            # costly array encoding, keeping all inputs and bounds unchanged.
+            if arch == "rv64":
+                options += ["--scalar-registers", "--max-field-sensitivity-array-size", "128"]
+            check(elf, "lower_bound", "search_spec.c", "search-" + arch, options)
             if arch == "rv64":
                 source = EXAMPLE / "simdjson/swar.c"
                 elf = compile(source, "parse_eight", "swar-rv64", arch)

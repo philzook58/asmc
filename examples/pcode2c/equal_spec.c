@@ -7,7 +7,7 @@ bool equal(int n, int a[], int b[]);
 void harness(void) {
   uint8_t ram[256];
   struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter(&s, ram, 0x1000, sizeof(ram), 0x10c8);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10c8);
   int data[16];
   /* data[i] corresponds to four little-endian bytes at 0x1000 + 4*i.
      Bytes 0..63 hold application data; the stack is in the upper half. */

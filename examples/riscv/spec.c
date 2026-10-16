@@ -17,7 +17,7 @@ void copy(uint8_t *, const uint8_t *, word);
 void harness(void) {
   uint8_t ram[256];
   struct asmc_state s;
-  struct asmc_riscv_frame frame = asmc_riscv_enter(&s, ram, 0x1000, sizeof(ram), 0x10f0);
+  struct asmc_riscv_frame frame = asmc_riscv_setup_ram_model_at(&s, ram, 0x1000, sizeof(ram), 0x10f0);
   word x = nondet_word(), y = nondet_word();
   asmc_riscv_arg(&s, 0, x); asmc_riscv_arg(&s, 1, y);
 #if CASE == 5

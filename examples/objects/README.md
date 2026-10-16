@@ -23,7 +23,7 @@ build/bin/asmc build/objects/functions.elf --function relay --callee bump \
 The harness passes its actual malloc pointer in an argument register. Assembly
 writes update that C object directly; there is no copy to a numeric RAM buffer.
 `asmc_sysv_arg_ptr` and `asmc_sysv_result_ptr` handle pointer arguments/results.
-`asmc_sysv_enter_objects` uses a separate C byte-array object for the machine
+`asmc_sysv_setup_objects_model` uses a separate C byte-array object for the machine
 stack. RISC-V provides corresponding `asmc_riscv_*` helpers. Other registers
 remain arbitrary, and the usual ABI/stack-restoration checks still apply.
 
@@ -32,17 +32,20 @@ For example, the essential x86 harness pattern is:
 ```c
 uint8_t stack[128];
 struct asmc_state s;
-struct asmc_sysv_frame frame = asmc_sysv_enter_objects(&s, stack, sizeof stack);
 uint32_t *p = malloc(sizeof *p);
 __CPROVER_assume(p != 0);
 uint32_t before = nondet_u32();
 *p = before;
 asmc_sysv_arg_ptr(&s, 0, p);
-asmc_target(&s);
+asmc_sysv_call_objects_model(&s, stack, sizeof stack);
 assert(*p == before + 1);
-asmc_sysv_check(&s, &frame);
 free(p);
 ```
+
+`asmc_sysv_call_objects_model` sets up the ABI, calls the target, and checks
+scalar ABI preservation. Set arguments before this call. To inspect or modify
+the entry state after setup, use `asmc_sysv_setup_objects_model`, call the target,
+and then `asmc_sysv_check` explicitly.
 
 This is the core pattern; `harness.c` is a complete compilable example. The
 caller's C allocation can also be an array, a field in a struct, or a C global

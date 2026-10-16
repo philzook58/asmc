@@ -93,7 +93,7 @@ def main():
 #include <assert.h>
 void harness(void) {
   uint8_t stack[128]; struct asmc_state s;
-  struct asmc_sysv_frame frame = asmc_sysv_enter_objects(&s, stack, sizeof stack);
+  struct asmc_sysv_frame frame = asmc_sysv_setup_objects_model(&s, stack, sizeof stack);
   asmc_set_reg(&s, ASMC_RDX, 8, 0);
   asmc_sysv_arg_ptr(&s, 0, &ASMC_REG_BYTE(&s, ASMC_RDX));
   asmc_target(&s);

@@ -33,69 +33,98 @@ def main():
             print("PASS demo " + name, flush=True)
             return text, output
 
+        def check_call_wrapper(architecture, elf, function, memory, expected=0):
+            abi = "sysv" if architecture == "x86" else "riscv"
+            arg = "asmc_sysv_arg64" if architecture == "x86" else "asmc_riscv_arg"
+            result = "asmc_sysv_result64" if architecture == "x86" else "asmc_riscv_result"
+            name = f"wrapper_{architecture}_{elf.stem}_{function}_{memory}"
+            harness = tmp / (name + ".c")
+            parameters = "&st, stack, sizeof stack" if memory == "objects" else "&st, stack, 0x1000, sizeof stack"
+            harness.write_text(f'''#include "asmc_{architecture}.h"
+void harness(void) {{
+  uint8_t stack[256];
+  struct asmc_state st;
+  {arg}(&st, 0, 9);
+  asmc_{abi}_call_{memory}_model({parameters});
+  assert({result}(&st) == 10);
+}}
+''')
+            text = run([asmc, elf, "--function", function, "--memory", memory,
+                        "--harness", harness, "--target", "wrapper_target", "-o", tmp / name,
+                        "--timeout", "60", "--memory-limit", "2048"], expected)
+            if expected == 10:
+                assert f"asmc_{abi}_check" in text, text
+            print("PASS demo " + name, flush=True)
+
         elf = tmp / "x86.elf"
         run(["gcc", "-nostdlib", "-no-pie", "-Wl,-e,inc", ROOT / "tests/challenges.S", "-o", elf])
-        post = ["--post", "out.rax == in.rdi + 1"]
+        post = ["--post", "outreg.rax == inreg.rdi + 1"]
         _, output = check("increment", elf, "inc", post)
         source = (output / "demo.c").read_text()
-        assert "asmc_sysv_check(&s, &frame)" in source
+        assert "asmc_sysv_check(&st, &frame)" in source
         assert "uint8_t stack[256]" in source and "uint64_t rdi;" in source
+        for memory in ("ram", "objects"):
+            check_call_wrapper("x86", elf, "inc", memory)
+            check_call_wrapper("x86", elf, "clobber_saved", memory, 10)
         text, _ = check("wrong_increment", elf, "inc_bad", [*post, "--beautify"], 10)
-        assert "in.rdi=" in text and "out.rax=" in text and "post: out.rax == in.rdi + 1" in text
+        assert "inreg.rdi=" in text and "outreg.rax=" in text and "post: outreg.rax == inreg.rdi + 1" in text
         assert "return_value_asmc_get_reg=" not in text and "Recent machine instructions:" in text
-        check("wraparound", elf, "inc", ["--pre", "in.rdi == UINT64_MAX", "--pre", "in.rsi == 9",
-                                          "--post", "out.rax == 0", "--post", "out.rsi == in.rsi"])
-        check("zero_extension", elf, "alias_dword", ["--post", "out.rax == (uint32_t)in.rdi"])
-        check("dword_aliases", elf, "alias_dword", ["--post", "out.eax == in.edi",
-                                                    "--post", "out.rax == out.eax"])
-        check("dword_wrap", elf, "inc", ["--pre", "in.edi == UINT32_MAX",
-                                         "--post", "out.eax == in.edi + 1", "--post", "out.eax == 0"])
-        text, _ = check("wrong_dword", elf, "inc_bad", ["--post", "out.eax == in.edi + 1"], 10)
-        assert "in.edi=" in text and "out.eax=" in text
-        assert "in.rdi=" not in text and "out.rax=" not in text and "in.al=" not in text
-        assert text.count("out.eax == in.edi + 1") == 1
+        check("wraparound", elf, "inc", ["--pre", "inreg.rdi == UINT64_MAX", "--pre", "inreg.rsi == 9",
+                                          "--post", "outreg.rax == 0", "--post", "outreg.rsi == inreg.rsi"])
+        check("zero_extension", elf, "alias_dword", ["--post", "outreg.rax == (uint32_t)inreg.rdi"])
+        check("dword_aliases", elf, "alias_dword", ["--post", "outreg.eax == inreg.edi",
+                                                    "--post", "outreg.rax == outreg.eax"])
+        check("dword_wrap", elf, "inc", ["--pre", "inreg.edi == UINT32_MAX",
+                                         "--post", "outreg.eax == inreg.edi + 1", "--post", "outreg.eax == 0"])
+        text, _ = check("wrong_dword", elf, "inc_bad", ["--post", "outreg.eax == inreg.edi + 1"], 10)
+        assert "inreg.edi=" in text and "outreg.eax=" in text
+        assert "inreg.rdi=" not in text and "outreg.rax=" not in text and "inreg.al=" not in text
+        assert text.count("outreg.eax == inreg.edi + 1") == 1
         text, _ = check("wrong_dword_full", elf, "inc_bad",
-                        ["--post", "out.eax == in.edi + 1", "--full-trace"], 10)
-        assert "in.rdi=" in text and "in.dil=" in text and "out.eax=" in text
-        text, _ = check("multiple_posts", elf, "inc", ["--post", "out.rax == out.rdi + 1",
-                        "--post", "out.rax == in.rax"], 10)
-        assert "in.rax=" in text and "out.rax=" in text and "out.rdi=" in text
-        assert "in.eax=" not in text and "in.r15=" not in text
-        assert text.count("out.rax == in.rax") == 1
+                        ["--post", "outreg.eax == inreg.edi + 1", "--full-trace"], 10)
+        assert "inreg.rdi=" in text and "inreg.dil=" in text and "outreg.eax=" in text
+        text, _ = check("multiple_posts", elf, "inc", ["--post", "outreg.rax == outreg.rdi + 1",
+                        "--post", "outreg.rax == inreg.rax"], 10)
+        assert "inreg.rax=" in text and "outreg.rax=" in text and "outreg.rdi=" in text
+        assert "inreg.eax=" not in text and "inreg.r15=" not in text
+        assert text.count("outreg.rax == inreg.rax") == 1
         text, _ = check("custom_entry_alias", elf, "inc_bad", ["--entry", "entry",
-                        "--post", "out.eax == in.edi + 1"], 10)
-        assert "in.edi=" in text and "in.rdi=" not in text
-        check("byte_aliases", elf, "alias_byte", ["--post", "out.al == 0x34 && out.ah == 0x12",
-              "--post", "out.ax == 0x1234", "--post", "(out.rax >> 16) == (in.rdi >> 16)"])
-        check("word_aliases", elf, "alias_word", ["--post", "out.ax == 0x4321",
-              "--post", "(out.rax >> 16) == (in.rdi >> 16)"])
-        check("narrow_wrap", elf, "inc", ["--pre", "in.dil == UINT8_MAX && in.di == UINT16_MAX",
-              "--post", "out.al == (uint8_t)(in.dil + 1)",
-              "--post", "out.ax == (uint16_t)(in.di + 1)"])
-        check("extended_aliases", elf, "inc", ["--pre", "in.r8 == UINT64_C(0x123456789abcdef0)",
-              "--pre", "in.r15 == UINT64_C(0xfedcba9876543210)",
-              "--pre", "in.rcx == 0xab12 && in.rdx == 0xcd34 && in.rbx == 0xef56",
-              "--post", "out.r8d == 0x9abcdef0u && out.r8w == 0xdef0 && out.r8b == 0xf0",
-              "--post", "out.r15d == 0x76543210u && out.r15w == 0x3210 && out.r15b == 0x10",
-              "--post", "out.ch == 0xab && out.dh == 0xcd && out.bh == 0xef",
-              "--post", "out.spl == (uint8_t)out.rsp && out.sp == (uint16_t)out.rsp"])
+                        "--post", "outreg.eax == inreg.edi + 1"], 10)
+        assert "inreg.edi=" in text and "inreg.rdi=" not in text
+        check("byte_aliases", elf, "alias_byte", ["--post", "outreg.al == 0x34 && outreg.ah == 0x12",
+              "--post", "outreg.ax == 0x1234", "--post", "(outreg.rax >> 16) == (inreg.rdi >> 16)"])
+        check("word_aliases", elf, "alias_word", ["--post", "outreg.ax == 0x4321",
+              "--post", "(outreg.rax >> 16) == (inreg.rdi >> 16)"])
+        check("narrow_wrap", elf, "inc", ["--pre", "inreg.dil == UINT8_MAX && inreg.di == UINT16_MAX",
+              "--post", "outreg.al == (uint8_t)(inreg.dil + 1)",
+              "--post", "outreg.ax == (uint16_t)(inreg.di + 1)"])
+        check("extended_aliases", elf, "inc", ["--pre", "inreg.r8 == UINT64_C(0x123456789abcdef0)",
+              "--pre", "inreg.r15 == UINT64_C(0xfedcba9876543210)",
+              "--pre", "inreg.rcx == 0xab12 && inreg.rdx == 0xcd34 && inreg.rbx == 0xef56",
+              "--post", "outreg.r8d == 0x9abcdef0u && outreg.r8w == 0xdef0 && outreg.r8b == 0xf0",
+              "--post", "outreg.r15d == 0x76543210u && outreg.r15w == 0x3210 && outreg.r15b == 0x10",
+              "--post", "outreg.ch == 0xab && outreg.dh == 0xcd && outreg.bh == 0xef",
+              "--post", "outreg.spl == (uint8_t)outreg.rsp && outreg.sp == (uint16_t)outreg.rsp"])
         check("signed_maximum", elf, "max_signed", ["--post",
-              "(int64_t)out.rax == ((int64_t)in.rdi < (int64_t)in.rsi ? (int64_t)in.rsi : (int64_t)in.rdi)"])
+              "(int64_t)outreg.rax == ((int64_t)inreg.rdi < (int64_t)inreg.rsi ? (int64_t)inreg.rsi : (int64_t)inreg.rdi)"])
         text, _ = check("safety_only", elf, "inc_bad")
         assert "safety/ABI only, no functional postcondition" in text
         check("callee_saved", elf, "clobber_saved", expected=10)
         text, _ = check("return_address", elf, "corrupt_return", expected=10)
-        assert "unexpected return address" in text
+        assert "clobbered stack return address" in text
+        assert "Return destination: 0x0 (0)" in text and "Expected harness return sentinel:" in text
+        text, _ = check("return_address_hex", elf, "corrupt_return", ["--trace-hex"], 10)
+        assert "Return destination: 0x0 (0)" in text and "Expected harness return sentinel:" in text
         text, _ = check("unconstrained_pointer", elf, "read64", expected=10)
         assert "memory access" in text
-        assert "in.rdi=" in text and "in.edi=" not in text
-        check("bounded_pointer", elf, "read64", ["--pre", "in.rdi == 0x1000",
-              "--post", "out.rax == asmc_load(&s, in.rdi, 8)"])
+        assert "inreg.rdi=" in text and "inreg.edi=" not in text
+        check("bounded_pointer", elf, "read64", ["--pre", "inreg.rdi == 0x1000",
+              "--post", "outreg.rax == asmc_load(&st, inreg.rdi, 8)"])
         check("object_stack", elf, "inc", [*post, "--memory", "objects"])
         text, _ = check("properties", elf, "inc", [*post, "--show-properties"])
-        assert "post: out.rax == in.rdi + 1" in text and "INSPECT:" in text and "PASS:" not in text
+        assert "post: outreg.rax == inreg.rdi + 1" in text and "INSPECT:" in text and "PASS:" not in text
         check("custom_names", elf, "inc", [*post, "--target", "lifted_inc", "--entry", "entry", "-DDEMO=1"])
-        text, output = check("invalid_expression", elf, "inc", ["--post", "out.no_such_register == 1"], 2)
+        text, output = check("invalid_expression", elf, "inc", ["--post", "outreg.no_such_register == 1"], 2)
         assert "ERROR:" in text and (output / "link.log").is_file() and not (output / "cbmc.log").exists()
 
         # The generated file can be used unchanged as an explicit harness.
@@ -119,6 +148,12 @@ stack_use:
   xor %eax,%eax
   ret
 .size stack_use,.-stack_use
+.globl red_zone
+.type red_zone,@function
+red_zone:
+  movq $42,-8(%rsp)
+  ret
+.size red_zone,.-red_zone
 .globl countdown
 .type countdown,@function
 countdown:
@@ -132,13 +167,18 @@ countdown:
 .section .note.GNU-stack,"",@progbits
 ''')
         run(["gcc", "-nostdlib", "-no-pie", "-Wl,-e,stack_use", assembly, "-o", elf])
+        for memory in ("ram", "objects"):
+            check("red_zone_" + memory, elf, "red_zone", ["--memory", memory,
+                  "--post", "asmc_load(&st, inreg.rsp - 8, 8) == 42"])
+            check("past_stack_" + memory, elf, "red_zone", ["--memory", memory,
+                  "--post", "asmc_load(&st, outreg.rsp, 1) == 42"], 10)
         check("small_stack", elf, "stack_use", expected=10)
         for memory in ("ram", "objects"):
             check("large_stack_" + memory, elf, "stack_use",
-                  ["--stack-size", "1024", "--memory", memory, "--post", "out.rax == 0"])
-        check("countdown", elf, "countdown", ["--pre", "in.rdi <= 4", "--post", "out.rax == 0"])
+                  ["--stack-size", "1024", "--memory", memory, "--post", "outreg.rax == 0"])
+        check("countdown", elf, "countdown", ["--pre", "inreg.rdi <= 4", "--post", "outreg.rax == 0"])
         text, _ = check("insufficient_bound", elf, "countdown",
-                        ["--pre", "in.rdi == 4", "--post", "out.rax == 0", "--unwindset", "asmc_target.0:2"], 11)
+                        ["--pre", "inreg.rdi == 4", "--post", "outreg.rax == 0", "--unwindset", "asmc_target.0:2"], 11)
         assert "INCOMPLETE:" in text and "PASS:" not in text
 
         # Unoptimized C exercises real call frames and stack spills in both modes.
@@ -157,7 +197,7 @@ word caller(word x) { return helper(x); }
         for memory in ("ram", "objects"):
             check("compiled_calls_" + memory, elf, "caller",
                   ["--callee", "helper", "--unwindset", "asmc_target.0:4", "--memory", memory,
-                   "--post", "out.rax == in.rdi + 1"])
+                   "--post", "outreg.rax == inreg.rdi + 1"])
 
         compiler = shutil.which("riscv64-unknown-elf-gcc")
         if not compiler:
@@ -169,16 +209,21 @@ word caller(word x) { return helper(x); }
                  "-nostdlib", "-static", "-Wl,--no-relax,-e,zero_test",
                  ROOT / "examples/riscv/instructions.S", "-o", elf])
             tag = f"rv{bits}_"
-            post = ["--post", "out.a0 == in.a0 + 1"]
+            for memory in ("ram", "objects"):
+                check_call_wrapper("riscv", elf, "zero_test", memory)
+                check_call_wrapper("riscv", elf, "bad_saved", memory, 10)
+            post = ["--post", "outreg.a0 == inreg.a0 + 1"]
             _, output = check(tag + "increment", elf, "zero_test", post)
             assert f"uint{bits}_t a0;" in (output / "demo.c").read_text()
-            check(tag + "wrong_result", elf, "zero_test", ["--post", "out.a0 == in.a0 + 2"], 10)
-            check(tag + "wrap", elf, "zero_test", ["--pre", f"in.a0 == UINT{bits}_MAX",
-                                                   "--post", "out.a0 == 0"])
+            check(tag + "wrong_result", elf, "zero_test", ["--post", "outreg.a0 == inreg.a0 + 2"], 10)
+            check(tag + "wrap", elf, "zero_test", ["--pre", f"inreg.a0 == UINT{bits}_MAX",
+                                                   "--post", "outreg.a0 == 0"])
             check(tag + "object_stack", elf, "zero_test", [*post, "--memory", "objects"])
             check(tag + "saved_register", elf, "bad_saved", expected=10)
             check(tag + "stack_pointer", elf, "bad_sp", expected=10)
-            check(tag + "return_address", elf, "bad_return", expected=10)
+            text, _ = check(tag + "return_address", elf, "bad_return", expected=10)
+            assert "clobbered RA register" in text
+            assert "Return destination:" in text and "Expected harness return sentinel:" in text
             run([compiler, f"-march=rv{bits}imc", "-mabi=" + ("ilp32" if bits == 32 else "lp64"),
                  "-O0", f"-DWORD_BITS={bits}", "-nostdlib", "-static", "-Wl,-e,caller",
                  calls, "-o", elf])
